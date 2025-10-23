@@ -1,0 +1,200 @@
+{
+  "last_node_id": 7,
+  "last_link_id": 6,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "PowerVisionVideoLoader",
+      "pos": [50, 50],
+      "size": {"0": 315, "1": 58},
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": [1],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "path",
+          "type": "PATH",
+          "links": null,
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {},
+      "widgets_values": ["sample_video.mp4"]
+    },
+    {
+      "id": 2,
+      "type": "PowerVisionQwen3VQA",
+      "pos": [450, 50],
+      "size": {"0": 315, "1": 200},
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source_path",
+          "type": "PATH",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "type": "STRING",
+          "links": [2],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "请分析这个视频的内容，包括：\n1. 主要场景和活动\n2. 出现的人物和物体\n3. 时间顺序和关键事件\n4. 整体氛围和情感",
+        "Qwen3-VL-8B-Instruct-FP8",
+        "none",
+        false,
+        0.7,
+        4096,
+        256,
+        1280,
+        -1,
+        "flash_attention_2"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "PowerVisionQwenModelLoader",
+      "pos": [50, 200],
+      "size": {"0": 315, "1": 120},
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "qwen_model",
+          "type": "QWEN_MODEL",
+          "links": [3],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "Qwen/Qwen2.5-VL-7B-Instruct",
+        "auto",
+        "BF16",
+        "flash_attention_2"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "PowerVisionObjectDetection",
+      "pos": [450, 300],
+      "size": {"0": 315, "1": 200},
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "qwen_model",
+          "type": "QWEN_MODEL",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "detection_result",
+          "type": "JSON",
+          "links": [4],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "bboxes",
+          "type": "BBOX",
+          "links": null,
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "person, vehicle, animal, object",
+        "all",
+        0.4,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 5,
+      "type": "ShowText",
+      "pos": [850, 50],
+      "size": {"0": 315, "1": 200},
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "string",
+          "type": "STRING",
+          "link": 2
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 6,
+      "type": "ShowText",
+      "pos": [850, 300],
+      "size": {"0": 315, "1": 200},
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "string",
+          "type": "STRING",
+          "link": 4
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 7,
+      "type": "Note",
+      "pos": [50, 400],
+      "size": {"0": 315, "1": 120},
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "properties": {},
+      "widgets_values": [
+        "视频分析示例\n\n此工作流演示了如何使用PowerVision进行视频内容分析：\n\n1. 视频内容理解 - 分析视频的整体内容和场景\n2. 目标检测 - 识别视频中的具体对象\n3. 多模态分析 - 结合视觉和文本信息\n\n适用于：\n- 视频内容审核\n- 智能监控\n- 视频摘要生成"
+      ]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 2, 0, "PATH"],
+    [2, 2, 0, 5, 0, "STRING"],
+    [3, 3, 0, 4, 0, "QWEN_MODEL"],
+    [4, 4, 0, 6, 0, "JSON"]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1,
+      "offset": [0, 0]
+    }
+  },
+  "version": 0.4
+}
