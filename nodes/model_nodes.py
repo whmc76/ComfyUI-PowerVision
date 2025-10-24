@@ -59,16 +59,12 @@ class PowerVisionQwen3VQA:
                 "text": ("STRING", {"default": "", "multiline": True}),
                 "model": (
                     [
-                        "Qwen3-VL-4B-Instruct-FP8",
-                        "Qwen3-VL-4B-Thinking-FP8",
-                        "Qwen3-VL-8B-Instruct-FP8",
-                        "Qwen3-VL-8B-Thinking-FP8",
                         "Qwen3-VL-4B-Instruct",
                         "Qwen3-VL-4B-Thinking",
                         "Qwen3-VL-8B-Instruct",
                         "Qwen3-VL-8B-Thinking",
                     ],
-                    {"default": "Qwen3-VL-4B-Instruct-FP8"},
+                    {"default": "Qwen3-VL-4B-Instruct"},
                 ),
                 "quantization": (
                     ["none", "4bit", "8bit"],
@@ -414,22 +410,37 @@ class PowerVisionQwen3VQAWithModel:
             
             image_inputs, video_inputs = process_vision_info(messages)
             
-            # 只传递非空的输入
-            processor_kwargs = {
-                "text": [text],
-                "padding": True,
-                "return_tensors": "pt",
-            }
-            
-            # 只有当有图片时才添加 images 参数
-            if image_inputs:
-                processor_kwargs["images"] = image_inputs
-            
-            # 只有当有视频时才添加 videos 参数
-            if video_inputs:
-                processor_kwargs["videos"] = video_inputs
-            
-            inputs = processor(**processor_kwargs)
+            # 根据模型类型选择不同的调用方式
+            if qwen_model.model_type == "qwen3":
+                # Qwen3-VL 支持 images 和 videos 参数
+                processor_kwargs = {
+                    "text": [text],
+                    "padding": True,
+                    "return_tensors": "pt",
+                }
+                
+                # 只有当有图片时才添加 images 参数
+                if image_inputs:
+                    processor_kwargs["images"] = image_inputs
+                
+                # 只有当有视频时才添加 videos 参数
+                if video_inputs:
+                    processor_kwargs["videos"] = video_inputs
+                
+                inputs = processor(**processor_kwargs)
+            else:
+                # Qwen2.5-VL 只支持 images 参数，不支持 videos
+                processor_kwargs = {
+                    "text": [text],
+                    "padding": True,
+                    "return_tensors": "pt",
+                }
+                
+                # 只有当有图片时才添加 images 参数
+                if image_inputs:
+                    processor_kwargs["images"] = image_inputs
+                
+                inputs = processor(**processor_kwargs)
             inputs = inputs.to(device)
             
             generated_ids = model.generate(
@@ -461,6 +472,8 @@ class PowerVisionQwenModelLoader:
             "required": {
                 "model_name": ([
                     # Qwen3-VL 模型
+                    "Qwen/Qwen3-VL-2B-Instruct",
+                    "Qwen/Qwen3-VL-2B-Thinking",
                     "Qwen/Qwen3-VL-4B-Instruct",
                     "Qwen/Qwen3-VL-4B-Thinking",
                     "Qwen/Qwen3-VL-8B-Instruct",
@@ -480,6 +493,7 @@ class PowerVisionQwenModelLoader:
                 "precision": ([
                     "INT4",
                     "INT8",
+                    "FP8",
                     "BF16",
                     "FP16",
                     "FP32",
@@ -488,6 +502,11 @@ class PowerVisionQwenModelLoader:
                     "flash_attention_2",
                     "sdpa",
                 ], ),
+                "download_source": ([
+                    "auto",
+                    "huggingface",
+                    "modelscope",
+                ], {"default": "auto"}),
             }
         }
 
@@ -496,31 +515,218 @@ class PowerVisionQwenModelLoader:
     FUNCTION = "load"
     CATEGORY = "PowerVision/Load Model"
 
-    def load(self, model_name: str, device: str, precision: str, attention: str) -> Tuple[QwenModel]:
+    def load(self, model_name: str, device: str, precision: str, attention: str, download_source: str = "auto") -> Tuple[QwenModel]:
         """加载Qwen模型"""
         model_dir = os.path.join(folder_paths.models_dir, "Qwen", model_name.replace("/", "_"))
         
-        # 首先检查带前缀的模型文件夹
-        if os.path.exists(model_dir) and os.listdir(model_dir):
-            print(f"PowerVision: 使用现有模型: {model_dir}")
+        def is_model_complete(model_path):
+            """检查模型文件夹是否包含必要的模型文件"""
+            if not os.path.exists(model_path):
+                return False
+            
+            # 检查是否有 .safetensors 文件（模型权重文件）
+            safetensors_files = [f for f in os.listdir(model_path) if f.endswith('.safetensors')]
+            if not safetensors_files:
+                return False
+            
+            # 检查是否有 config.json（配置文件）
+            config_file = os.path.join(model_path, 'config.json')
+            if not os.path.exists(config_file):
+                return False
+                
+            return True
+        
+        def find_alternative_model_folder(model_name):
+            """查找替代模型文件夹（用于回退）"""
+            # 尝试不同的文件夹命名格式
+            variants = [
+                model_name.split("/")[-1],     # Qwen3-VL-4B-Instruct
+                model_name.replace("/", "_"),  # Qwen_Qwen3-VL-4B-Instruct
+            ]
+            
+            for variant in variants:
+                test_path = os.path.join(folder_paths.models_dir, "Qwen", variant)
+                if is_model_complete(test_path):
+                    print(f"PowerVision: 找到替代模型文件夹: {test_path}")
+                    return test_path
+            return None
+        
+        # 优先使用不带前缀的模型文件夹（标准 Hugging Face 目录结构）
+        clean_model_dir = os.path.join(folder_paths.models_dir, "Qwen", model_name.split("/")[-1])
+        if is_model_complete(clean_model_dir):
+            print(f"PowerVision: 使用现有模型文件夹: {clean_model_dir}")
+            model_dir = clean_model_dir
         else:
-            # 尝试使用不带前缀的模型文件夹
-            alternative_dir = os.path.join(folder_paths.models_dir, "Qwen", model_name.split("/")[-1])
-            if os.path.exists(alternative_dir) and os.listdir(alternative_dir):
-                print(f"PowerVision: 使用现有模型文件夹: {alternative_dir}")
-                model_dir = alternative_dir
+            # 尝试使用带前缀的模型文件夹（兼容旧版本）
+            if is_model_complete(model_dir):
+                print(f"PowerVision: 使用现有模型: {model_dir}")
             else:
-                print(f"PowerVision: 模型 {model_name} 不存在，开始下载...")
-                try:
-                    snapshot_download(
-                        repo_id=model_name,
-                        local_dir=model_dir,
-                        local_dir_use_symlinks=False,
-                        resume_download=True,
-                    )
-                except Exception as e:
-                    print(f"PowerVision: 下载失败: {e}")
-                    raise e
+                # 尝试查找替代模型文件夹
+                alt_dir = find_alternative_model_folder(model_name)
+                if alt_dir:
+                    print(f"PowerVision: 使用替代模型文件夹: {alt_dir}")
+                    model_dir = alt_dir
+                else:
+                    print(f"PowerVision: 模型 {model_name} 不存在或不完整，开始下载...")
+                    print(f"PowerVision: 下载源设置: {download_source}")
+                    
+                    download_success = False
+                    
+                    if download_source == "huggingface":
+                        # 仅使用 Hugging Face
+                        try:
+                            print(f"PowerVision: 从 Hugging Face 下载 {model_name}...")
+                            print(f"PowerVision: 开始下载模型文件，请稍候...")
+                            snapshot_download(
+                                repo_id=model_name,
+                                local_dir=model_dir,
+                                local_dir_use_symlinks=False,
+                                resume_download=True,
+                            )
+                            download_success = True
+                            print(f"PowerVision: 从 Hugging Face 下载成功")
+                        except Exception as e:
+                            print(f"PowerVision: Hugging Face 下载失败: {e}")
+                            
+                    elif download_source == "modelscope":
+                        # 仅使用 ModelScope
+                        try:
+                            print(f"PowerVision: 从 ModelScope 下载 {model_name}...")
+                            
+                            # 方法1: 尝试使用 ModelScope 库
+                            try:
+                                from modelscope import snapshot_download as ms_snapshot_download
+                                print(f"PowerVision: 开始下载模型文件，请稍候...")
+                                ms_snapshot_download(
+                                    model_id=model_name,
+                                    cache_dir=model_dir,
+                                    local_dir=model_dir,
+                                    local_dir_use_symlinks=False,
+                                )
+                                download_success = True
+                                print(f"PowerVision: 使用 ModelScope 库下载成功")
+                            except ImportError:
+                                print(f"PowerVision: ModelScope 库未安装，尝试使用 git clone...")
+                                
+                                # 方法2: 使用 git clone 从 ModelScope
+                                import subprocess
+                                import shutil
+                                import time
+                                
+                                # 构建 ModelScope git URL
+                                modelscope_url = f"https://www.modelscope.cn/{model_name}.git"
+                                temp_dir = model_dir + "_temp"
+                                
+                                # 清理可能存在的临时目录
+                                if os.path.exists(temp_dir):
+                                    print(f"PowerVision: 清理临时目录: {temp_dir}")
+                                    shutil.rmtree(temp_dir, ignore_errors=True)
+                                
+                                print(f"PowerVision: 使用 git clone 从 ModelScope: {modelscope_url}")
+                                
+                                # 执行 git clone 并显示进度
+                                print(f"PowerVision: 开始下载模型文件...")
+                                result = subprocess.run([
+                                    "git", "clone", "--progress", modelscope_url, temp_dir
+                                ], capture_output=True, text=True, timeout=1800)  # 30分钟超时
+                                
+                                if result.returncode == 0:
+                                    # 移动文件到目标目录
+                                    if os.path.exists(temp_dir):
+                                        if os.path.exists(model_dir):
+                                            shutil.rmtree(model_dir)
+                                        shutil.move(temp_dir, model_dir)
+                                        download_success = True
+                                        print(f"PowerVision: 使用 git clone 从 ModelScope 下载成功")
+                                    else:
+                                        print(f"PowerVision: git clone 完成但目录不存在")
+                                else:
+                                    print(f"PowerVision: git clone 失败: {result.stderr}")
+                                    # 清理失败的临时目录
+                                    if os.path.exists(temp_dir):
+                                        shutil.rmtree(temp_dir, ignore_errors=True)
+                                    
+                        except Exception as ms_e:
+                            print(f"PowerVision: ModelScope 下载失败: {ms_e}")
+                            
+                    else:  # download_source == "auto"
+                        # 自动选择：先尝试 Hugging Face，失败后尝试 ModelScope
+                        try:
+                            print(f"PowerVision: 尝试从 Hugging Face 下载 {model_name}...")
+                            print(f"PowerVision: 开始下载模型文件，请稍候...")
+                            snapshot_download(
+                                repo_id=model_name,
+                                local_dir=model_dir,
+                                local_dir_use_symlinks=False,
+                                resume_download=True,
+                            )
+                            download_success = True
+                            print(f"PowerVision: 从 Hugging Face 下载成功")
+                        except Exception as e:
+                            print(f"PowerVision: Hugging Face 下载失败: {e}")
+                            
+                            # 尝试从 ModelScope 下载
+                            try:
+                                print(f"PowerVision: 尝试从 ModelScope 下载 {model_name}...")
+                                
+                                # 方法1: 尝试使用 ModelScope 库
+                                try:
+                                    from modelscope import snapshot_download as ms_snapshot_download
+                                    print(f"PowerVision: 开始下载模型文件，请稍候...")
+                                    ms_snapshot_download(
+                                        model_id=model_name,
+                                        cache_dir=model_dir,
+                                        local_dir=model_dir,
+                                        local_dir_use_symlinks=False,
+                                    )
+                                    download_success = True
+                                    print(f"PowerVision: 使用 ModelScope 库下载成功")
+                                except ImportError:
+                                    print(f"PowerVision: ModelScope 库未安装，尝试使用 git clone...")
+                                    
+                                    # 方法2: 使用 git clone 从 ModelScope
+                                    import subprocess
+                                    import shutil
+                                    import time
+                                    
+                                    # 构建 ModelScope git URL
+                                    modelscope_url = f"https://www.modelscope.cn/{model_name}.git"
+                                    temp_dir = model_dir + "_temp"
+                                    
+                                    # 清理可能存在的临时目录
+                                    if os.path.exists(temp_dir):
+                                        print(f"PowerVision: 清理临时目录: {temp_dir}")
+                                        shutil.rmtree(temp_dir, ignore_errors=True)
+                                    
+                                    print(f"PowerVision: 使用 git clone 从 ModelScope: {modelscope_url}")
+                                    
+                                    # 执行 git clone 并显示进度
+                                    print(f"PowerVision: 开始下载模型文件...")
+                                    result = subprocess.run([
+                                        "git", "clone", "--progress", modelscope_url, temp_dir
+                                    ], capture_output=True, text=True, timeout=1800)  # 30分钟超时
+                                    
+                                    if result.returncode == 0:
+                                        # 移动文件到目标目录
+                                        if os.path.exists(temp_dir):
+                                            if os.path.exists(model_dir):
+                                                shutil.rmtree(model_dir)
+                                            shutil.move(temp_dir, model_dir)
+                                            download_success = True
+                                            print(f"PowerVision: 使用 git clone 从 ModelScope 下载成功")
+                                        else:
+                                            print(f"PowerVision: git clone 完成但目录不存在")
+                                    else:
+                                        print(f"PowerVision: git clone 失败: {result.stderr}")
+                                        # 清理失败的临时目录
+                                        if os.path.exists(temp_dir):
+                                            shutil.rmtree(temp_dir, ignore_errors=True)
+                                        
+                            except Exception as ms_e:
+                                print(f"PowerVision: ModelScope 下载失败: {ms_e}")
+                    
+                    if not download_success:
+                        raise Exception(f"PowerVision: 下载失败，无法获取模型 {model_name}")
         
         if device == "auto":
             device_map = "auto"
@@ -529,44 +735,44 @@ class PowerVisionQwenModelLoader:
         else:
             device_map = {"": device}
 
+        # 根据模型名称选择合适的模型类
+        # 检查是否为 FP8 模型
+        is_fp8_model = "FP8" in model_name
+        
         precision = precision.upper()
         dtype_map = {
             "BF16": torch.bfloat16,
             "FP16": torch.float16,
             "FP32": torch.float32,
+            "FP8": torch.float16,  # FP8 使用 FP16 作为基础类型
         }
         torch_dtype = dtype_map.get(precision, torch.bfloat16)
         quant_config = None
         
-        if precision == "INT4":
-            quant_config = BitsAndBytesConfig(
-                load_in_4bit=True, 
-                bnb_4bit_quant_type="nf4", 
-                bnb_4bit_use_double_quant=True
-            )
-        elif precision == "INT8":
-            quant_config = BitsAndBytesConfig(load_in_8bit=True)
+        # FP8 模型不支持 INT4/INT8 量化配置，因为模型已经预量化
+        if not is_fp8_model:
+            if precision == "INT4":
+                quant_config = BitsAndBytesConfig(
+                    load_in_4bit=True, 
+                    bnb_4bit_quant_type="nf4", 
+                    bnb_4bit_use_double_quant=True
+                )
+            elif precision == "INT8":
+                quant_config = BitsAndBytesConfig(load_in_8bit=True)
+        elif is_fp8_model and precision in ["INT4", "INT8"]:
+            print(f"PowerVision: FP8 模型不支持 INT4/INT8 精度设置，将使用 FP8 模型的默认精度")
 
         attn_impl = attention
         if precision == "FP32" and attn_impl == "flash_attention_2":
             attn_impl = "sdpa"
-
-        # 根据模型名称选择合适的模型类
-        if "Qwen3-VL" in model_name and QWEN3_AVAILABLE:
+        
+        if "Qwen3-VL" in model_name:
+            if not QWEN3_AVAILABLE:
+                raise Exception(f"PowerVision: Qwen3-VL 模型 {model_name} 不可用。请升级 transformers 库到 4.57.1 或更高版本，或手动选择 Qwen2.5-VL 模型。")
             model_class = Qwen3VLForConditionalGeneration
             model_type = "qwen3"
-        elif "Qwen3-VL" in model_name and not QWEN3_AVAILABLE:
-            print(f"PowerVision: Qwen3-VL 模型 {model_name} 不可用，回退到 Qwen2.5-VL")
-            # 将 Qwen3-VL 模型名称映射到对应的 Qwen2.5-VL 模型
-            model_mapping = {
-                "Qwen/Qwen3-VL-4B-Instruct": "Qwen/Qwen2.5-VL-3B-Instruct",
-                "Qwen/Qwen3-VL-4B-Thinking": "Qwen/Qwen2.5-VL-3B-Instruct",  # 没有对应的 Thinking 版本
-                "Qwen/Qwen3-VL-8B-Instruct": "Qwen/Qwen2.5-VL-7B-Instruct",
-                "Qwen/Qwen3-VL-8B-Thinking": "Qwen/Qwen2.5-VL-7B-Instruct",  # 没有对应的 Thinking 版本
-            }
-            model_name = model_mapping.get(model_name, "Qwen/Qwen2.5-VL-3B-Instruct")
-            model_class = Qwen2_5_VLForConditionalGeneration
-            model_type = "qwen2.5"
+            if is_fp8_model:
+                print(f"PowerVision: 使用 Qwen3-VL FP8 模型: {model_name}")
         else:
             model_class = Qwen2_5_VLForConditionalGeneration
             model_type = "qwen2.5"
@@ -597,6 +803,12 @@ class PowerVisionQwenModelLoader:
         except Exception:
             raise
         
-        processor = AutoProcessor.from_pretrained(model_dir)
+        # 对于 Qwen2.5-VL，使用 slow processor 以避免检测结果差异
+        if model_type == "qwen2.5":
+            processor = AutoProcessor.from_pretrained(model_dir, use_fast=False)
+            print("PowerVision: Qwen2.5-VL 使用 slow processor (use_fast=False)")
+        else:
+            processor = AutoProcessor.from_pretrained(model_dir)
+        
         return (QwenModel(model=model, processor=processor, device=device, model_type=model_type),)
 

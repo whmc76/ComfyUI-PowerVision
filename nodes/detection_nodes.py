@@ -49,8 +49,10 @@ def parse_boxes(
     input_w: int,
     input_h: int,
     score_threshold: float = 0.0,
+    target: str = "object",
+    model_type: str = "qwen2.5",
 ) -> List[Dict[str, Any]]:
-    """从模型的原始JSON输出中解析边界框"""
+    """Return bounding boxes parsed from the model's raw JSON output."""
     text = parse_json(text)
     try:
         data = json.loads(text)
@@ -61,7 +63,6 @@ def parse_boxes(
             end_idx = text.rfind('"}') + len('"}')
             truncated = text[:end_idx] + "]"
             data = ast.literal_eval(truncated)
-    
     if isinstance(data, dict):
         inner = data.get("content")
         if isinstance(inner, str):
@@ -72,26 +73,91 @@ def parse_boxes(
         else:
             data = []
     
+    # 如果 data 本身就是坐标数组（不是列表中的项），需要特殊处理
+    if isinstance(data, list) and len(data) == 4 and all(isinstance(x, (int, float)) for x in data):
+        # data 就是 [x1, y1, x2, y2]，需要包装成 [{"bbox_2d": [...]}]
+        data = [{"bbox_2d": data, "label": target}]
+    
     items: List[DetectedBox] = []
     x_scale = img_width / input_w
     y_scale = img_height / input_h
 
     for item in data:
-        box = item.get("bbox_2d") or item.get("bbox") or item
-        label = item.get("label", "")
-        score = float(item.get("score", 1.0))
-        y1, x1, y2, x2 = box[1], box[0], box[3], box[2]
-        abs_y1 = int(y1 * y_scale)
-        abs_x1 = int(x1 * x_scale)
-        abs_y2 = int(y2 * y_scale)
-        abs_x2 = int(x2 * x_scale)
+        # 处理非字典项（如直接的坐标数组）
+        if not isinstance(item, dict):
+            # 如果 item 本身就是坐标数组 [x1, y1, x2, y2]
+            if isinstance(item, (list, tuple)) and len(item) == 4:
+                box = item
+                label = target
+                score = 1.0
+            else:
+                continue
+        else:
+            box = item.get("bbox_2d") or item.get("bbox")
+            label = item.get("label", target)
+            score = float(item.get("score", 1.0))
+            
+            # 如果 box 为空，跳过此项
+            if box is None:
+                continue
+        
+        # 确保 box 是列表
+        if not isinstance(box, (list, tuple)) or len(box) != 4:
+            continue
+        
+        if model_type == "qwen3":
+            # Qwen3-VL 使用归一化到 1000 的坐标系
+            print(f"PowerVision: Qwen3-VL 原始坐标 box={box}, img_size={img_width}x{img_height}, input_size={input_w}x{input_h}")
+            
+            # Qwen3-VL 返回的坐标是 [x1, y1, x2, y2] 格式，归一化到 1000
+            norm_x1, norm_y1, norm_x2, norm_y2 = box[0], box[1], box[2], box[3]
+            
+            # 计算从归一化坐标到输入尺寸的比例
+            norm_to_input_w = input_w / 1000.0
+            norm_to_input_h = input_h / 1000.0
+            
+            # 将归一化坐标转换为输入尺寸坐标
+            input_x1 = norm_x1 * norm_to_input_w
+            input_y1 = norm_y1 * norm_to_input_h
+            input_x2 = norm_x2 * norm_to_input_w
+            input_y2 = norm_y2 * norm_to_input_h
+            
+            # 将输入尺寸坐标缩放到原始图像坐标
+            abs_x1 = int(input_x1 * x_scale)
+            abs_y1 = int(input_y1 * y_scale)
+            abs_x2 = int(input_x2 * x_scale)
+            abs_y2 = int(input_y2 * y_scale)
+            
+            print(f"PowerVision: Qwen3-VL 转换后坐标 [{abs_x1}, {abs_y1}, {abs_x2}, {abs_y2}]")
+        else:
+            # Qwen2.5-VL 的坐标系：直接使用输入尺寸坐标
+            print(f"PowerVision: Qwen2.5-VL 原始坐标 box={box}, img_size={img_width}x{img_height}, input_size={input_w}x{input_h}, scale={x_scale:.2f}x{y_scale:.2f}")
+            
+            y1, x1, y2, x2 = box[1], box[0], box[3], box[2]
+            
+            # 检查坐标是否超出输入尺寸范围
+            if x1 > input_w or x2 > input_w or y1 > input_h or y2 > input_h:
+                print(f"PowerVision: 警告！坐标超出输入尺寸: x1={x1}, y1={y1}, x2={x2}, y2={y2} vs input_w={input_w}, input_h={input_h}")
+            
+            abs_y1 = int(y1 * y_scale)
+            abs_x1 = int(x1 * x_scale)
+            abs_y2 = int(y2 * y_scale)
+            abs_x2 = int(x2 * x_scale)
+            
+            print(f"PowerVision: Qwen2.5-VL 缩放后坐标 [{abs_x1}, {abs_y1}, {abs_x2}, {abs_y2}]")
         if abs_x1 > abs_x2:
             abs_x1, abs_x2 = abs_x2, abs_x1
         if abs_y1 > abs_y2:
             abs_y1, abs_y2 = abs_y2, abs_y1
+        
+        # 限制坐标在图像范围内
+        abs_x1 = max(0, min(abs_x1, img_width - 1))
+        abs_y1 = max(0, min(abs_y1, img_height - 1))
+        abs_x2 = max(0, min(abs_x2, img_width))
+        abs_y2 = max(0, min(abs_y2, img_height))
+        
         if score >= score_threshold:
             items.append(DetectedBox([abs_x1, abs_y1, abs_x2, abs_y2], score, label))
-    
     items.sort(key=lambda x: x.score, reverse=True)
     return [
         {"score": b.score, "bbox": b.bbox, "label": b.label}
@@ -172,7 +238,11 @@ class PowerVisionObjectDetection:
             except Exception:
                 pass
 
-        prompt = f"Locate the {target} and output bbox in JSON"
+        # 使用优化的 prompt，明确指定坐标格式和图像坐标系
+        prompt = f"""Find the {target} in the image and output bounding box coordinates in JSON format.
+Output format: [{{"bbox_2d": [x1, y1, x2, y2], "label": "{target}"}}]
+Coordinates: (x1,y1) is top-left corner, (x2,y2) is bottom-right corner.
+Only return the exact bounding box coordinates of the {target}, nothing else."""
 
         if isinstance(image, torch.Tensor):
             image = (image.squeeze().clamp(0, 1) * 255).to(torch.uint8).cpu().numpy()
@@ -180,12 +250,18 @@ class PowerVisionObjectDetection:
         elif not isinstance(image, Image.Image):
             raise ValueError("Unsupported image type")
 
+        # 构建消息，按照 Qwen VL 标准格式
         messages = [
-            {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": [{"type": "text", "text": prompt}, {"image": image}]},
+            {"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image", "image": image}]},
         ]
+        
+        # 应用 chat template
         text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        
+        # 获取模型设备
         model_device = next(model.parameters()).device
+        
+        # 使用 processor 处理输入
         inputs = processor(text=[text], images=[image], return_tensors="pt", padding=True).to(model_device)
         
         with torch.no_grad():
@@ -195,8 +271,13 @@ class PowerVisionObjectDetection:
             gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )[0]
         
+        print(f"PowerVision: 模型输出原始文本: {output_text}")
+        
         input_h = inputs['image_grid_thw'][0][1] * 14
         input_w = inputs['image_grid_thw'][0][2] * 14
+        
+        print(f"PowerVision: 图像预处理后尺寸 input_w={input_w}, input_h={input_h}")
+        
         items = parse_boxes(
             output_text,
             image.width,
@@ -204,6 +285,8 @@ class PowerVisionObjectDetection:
             input_w,
             input_h,
             score_threshold,
+            target,
+            qwen_model.model_type,
         )
 
         selection = bbox_selection.strip().lower()

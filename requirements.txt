@@ -17,6 +17,9 @@ optimum
 safetensors
 einops
 
+# ModelScope 生态系统 (备选下载源)
+modelscope
+
 # Qwen-VL 专用依赖
 qwen-vl-utils
 
