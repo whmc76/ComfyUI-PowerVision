@@ -1,5 +1,17 @@
 # ComfyUI PowerVision 更新日志
 
+## [1.2.1] - 2025-01-XX
+
+### 🔧 修复
+- **修复 Thinking 模型输出干扰**：增强 `parse_json` 函数，自动过滤 Thinking 模型的思考内容（`<think>...</think>` 和 `<thinking>...</thinking>` 标签）
+- **改进 JSON 解析稳定性**：避免 Thinking 模型的思考内容干扰 JSON 格式解析
+
+### 🎯 改进
+- **添加正则表达式支持**：使用 `re` 模块过滤 Thinking 模型的思考内容
+- **支持多种标签格式**：支持 `<think>`、`<thinking>` 等多种 Thinking 模型使用的标签格式
+
+---
+
 ## [1.2.0] - 2025-01-XX
 
 ### 🚀 新功能

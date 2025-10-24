@@ -4,7 +4,7 @@ ComfyUI PowerVision 插件
 这是一个基于 ComfyUI 的 PowerVision 插件，提供强大的视觉处理功能。
 
 作者: PowerVision Team
-版本: 1.2.0
+版本: 1.2.1
 许可证: MIT
 
 开源项目来源声明:
@@ -45,7 +45,7 @@ __all__ = [
 # 插件元数据
 PLUGIN_INFO = {
     "name": "ComfyUI PowerVision",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "强大的视觉处理插件",
     "author": "PowerVision Team",
     "license": "MIT",

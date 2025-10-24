@@ -7,6 +7,7 @@ PowerVision 检测相关节点
 import os
 import ast
 import json
+import re
 import torch
 from PIL import Image
 from typing import List, Dict, Any, Tuple
@@ -26,7 +27,19 @@ class DetectedBox:
 
 
 def parse_json(json_output: str) -> str:
-    """从模型响应字符串中提取JSON载荷"""
+    """从模型响应字符串中提取JSON载荷，过滤 Thinking 模型的思考内容"""
+    
+    # 过滤 Thinking 模型的思考内容（支持多种标签格式）
+    thinking_patterns = [
+        (r'<think>.*?</think>', '<think>'),
+        (r'<thinking>.*?</thinking>', '<thinking>'),
+    ]
+    
+    for pattern, marker in thinking_patterns:
+        if marker in json_output:
+            json_output = re.sub(pattern, '', json_output, flags=re.DOTALL)
+    
+    # 提取 JSON 代码块
     if "```json" in json_output:
         json_output = json_output.split("```json", 1)[1]
         json_output = json_output.split("```", 1)[0]
