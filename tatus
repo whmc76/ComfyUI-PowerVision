@@ -1,0 +1,67 @@
+warning: in the working copy of 'requirements.txt', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/requirements.txt b/requirements.txt[m
+[1mindex edd18e0..d7d97d1 100644[m
+[1m--- a/requirements.txt[m
+[1m+++ b/requirements.txt[m
+[36m@@ -1,55 +1,19 @@[m
+ # ComfyUI PowerVision 插件依赖包[m
+[31m-# 基于 ComfyUI_Qwen3-VL-Instruct 和 Comfyui_Object_Detect_QWen_VL 项目[m
+[31m-[m
+[31m-# 核心深度学习框架[m
+[31m-torch[m
+[31m-torchvision[m
+[31m-torchaudio[m
+[31m-numpy[m
+[31m-pillow[m
+[31m-typing_extensions[m
+[32m+[m[32m# 简化版本，依赖 ComfyUI 已有的核心库（torch, torchvision, torchaudio, numpy, pillow）[m
+ [m
+ # Hugging Face 生态系统[m
+[31m-huggingface_hub>=0.23.1[m
+[31m-transformers>=4.57.1[m
+[32m+[m[32mhuggingface_hub[m
+[32m+[m[32mtransformers>=4.45.0[m
+ accelerate[m
+[31m-optimum[m
+ safetensors[m
+[31m-einops[m
+[31m-[m
+[31m-# ModelScope 生态系统 (备选下载源)[m
+[31m-modelscope[m
+ [m
+ # Qwen-VL 专用依赖[m
+ qwen-vl-utils[m
+ [m
+[31m-# 图像和视频处理[m
+[31m-opencv-python[m
+[31m-av[m
+[31m-imageio[m
+[31m-imageio-ffmpeg[m
+[31m-[m
+ # 量化支持[m
+ bitsandbytes[m
+ [m
+[31m-# 系统特定依赖[m
+[31m-triton-windows; sys_platform == 'win32'[m
+[31m-triton; sys_platform == 'linux'[m
+[31m-[m
+[31m-# 科学计算[m
+[31m-scipy[m
+[31m-scikit-image[m
+[31m-[m
+[31m-# 性能优化依赖 (可选)[m
+[31m-# xformers>=0.0.20  # 用于注意力机制优化[m
+[31m-# flash-attn>=2.0.0  # 用于 Flash Attention[m
+[31m-[m
+[31m-# 开发和测试依赖 (可选)[m
+[31m-# pytest>=7.0.0[m
+[31m-# black>=22.0.0[m
+[31m-# flake8>=5.0.0[m
+[31m-[m
+ # 注意: [m
+[31m-# 1. 建议使用虚拟环境来管理依赖[m
+[31m-# 2. 某些依赖可能需要特定的 CUDA 版本[m
+[31m-# 3. 如果遇到版本冲突，请根据错误信息调整版本号[m
+[32m+[m[32m# - torch, torchvision, torchaudio, numpy, pillow 由 ComfyUI 提供，无需安装[m
+[32m+[m[32m# - 版本限制已放宽，与 ComfyUI 环境兼容[m
+[32m+[m[32m# - ModelScope 是可选的备选下载源，可按需安装（已在代码中处理为可选）[m

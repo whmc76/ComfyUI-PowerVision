@@ -1,55 +1,19 @@
 # ComfyUI PowerVision 插件依赖包
-# 基于 ComfyUI_Qwen3-VL-Instruct 和 Comfyui_Object_Detect_QWen_VL 项目
-
-# 核心深度学习框架
-torch
-torchvision
-torchaudio
-numpy
-pillow
-typing_extensions
+# 简化版本，依赖 ComfyUI 已有的核心库（torch, torchvision, torchaudio, numpy, pillow）
 
 # Hugging Face 生态系统
-huggingface_hub>=0.23.1
-transformers>=4.57.1
+huggingface_hub
+transformers>=4.45.0
 accelerate
-optimum
 safetensors
-einops
-
-# ModelScope 生态系统 (备选下载源)
-modelscope
 
 # Qwen-VL 专用依赖
 qwen-vl-utils
 
-# 图像和视频处理
-opencv-python
-av
-imageio
-imageio-ffmpeg
-
 # 量化支持
 bitsandbytes
 
-# 系统特定依赖
-triton-windows; sys_platform == 'win32'
-triton; sys_platform == 'linux'
-
-# 科学计算
-scipy
-scikit-image
-
-# 性能优化依赖 (可选)
-# xformers>=0.0.20  # 用于注意力机制优化
-# flash-attn>=2.0.0  # 用于 Flash Attention
-
-# 开发和测试依赖 (可选)
-# pytest>=7.0.0
-# black>=22.0.0
-# flake8>=5.0.0
-
 # 注意: 
-# 1. 建议使用虚拟环境来管理依赖
-# 2. 某些依赖可能需要特定的 CUDA 版本
-# 3. 如果遇到版本冲突，请根据错误信息调整版本号
+# - torch, torchvision, torchaudio, numpy, pillow 由 ComfyUI 提供，无需安装
+# - 版本限制已放宽，与 ComfyUI 环境兼容
+# - ModelScope 是可选的备选下载源，可按需安装（已在代码中处理为可选）
