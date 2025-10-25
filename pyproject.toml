@@ -1,0 +1,47 @@
+[project]
+name = "comfyui-powervision"
+description = "A powerful ComfyUI visual processing plugin with multi-modal understanding capabilities, integrating Qwen-VL and SAM2 models"
+version = "1.2.1"
+license = {file = "LICENSE"}
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "torch",
+    "numpy",
+    "Pillow",
+    "huggingface_hub",
+    "transformers>=4.45.0",
+    "accelerate",
+    "safetensors",
+    "qwen-vl-utils",
+    "bitsandbytes",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Graphics",
+]
+
+[project.urls]
+Homepage = "https://github.com/powervision/ComfyUI_PowerVision"
+Repository = "https://github.com/powervision/ComfyUI_PowerVision"
+Documentation = "https://github.com/powervision/ComfyUI_PowerVision/wiki"
+"Bug Tracker" = "https://github.com/powervision/ComfyUI_PowerVision/issues"
+Changelog = "https://github.com/powervision/ComfyUI_PowerVision/blob/main/CHANGELOG.md"
+
+# Used by Comfy Registry https://registry.comfy.org
+[tool.comfy]
+PublisherId = "whmc76"
+DisplayName = "ComfyUI-PowerVision"
+Icon = ""
+Banner = ""
+requires-comfyui = ">=1.0.0"
+includes = []
