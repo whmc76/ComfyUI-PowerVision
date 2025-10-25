@@ -31,11 +31,11 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/powervision/ComfyUI_PowerVision"
-Repository = "https://github.com/powervision/ComfyUI_PowerVision"
-Documentation = "https://github.com/powervision/ComfyUI_PowerVision/wiki"
-"Bug Tracker" = "https://github.com/powervision/ComfyUI_PowerVision/issues"
-Changelog = "https://github.com/powervision/ComfyUI_PowerVision/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/whmc76/ComfyUI_PowerVision"
+Repository = "https://github.com/whmc76/ComfyUI_PowerVision"
+Documentation = "https://github.com/whmc76/ComfyUI_PowerVision/wiki"
+"Bug Tracker" = "https://github.com/whmc76/ComfyUI_PowerVision/issues"
+Changelog = "https://github.com/whmc76/ComfyUI_PowerVision/blob/main/CHANGELOG.md"
 
 # Used by Comfy Registry https://registry.comfy.org
 [tool.comfy]
