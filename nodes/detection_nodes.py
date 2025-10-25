@@ -274,8 +274,20 @@ Only return the exact bounding box coordinates of the {target}, nothing else."""
         # 获取模型设备
         model_device = next(model.parameters()).device
         
-        # 使用 processor 处理输入
-        inputs = processor(text=[text], images=[image], return_tensors="pt", padding=True).to(model_device)
+        # 使用 processor 处理输入，根据模型类型使用不同的接口
+        if model_type == "qwen3":
+            # Qwen3-VL 使用新的接口，不需要images参数
+            inputs = processor(text=[text], return_tensors="pt", padding=True).to(model_device)
+            # 单独处理图像
+            if hasattr(processor, 'process_images'):
+                image_inputs = processor.process_images([image])
+                inputs.update(image_inputs)
+            else:
+                # 如果processor没有process_images方法，使用传统方式
+                inputs = processor(text=[text], images=[image], return_tensors="pt", padding=True).to(model_device)
+        else:
+            # Qwen2.5-VL 使用传统接口
+            inputs = processor(text=[text], images=[image], return_tensors="pt", padding=True).to(model_device)
         
         with torch.no_grad():
             output_ids = model.generate(**inputs, max_new_tokens=1024)

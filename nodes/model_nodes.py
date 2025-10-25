@@ -15,27 +15,20 @@ from transformers import (
     BitsAndBytesConfig,
 )
 
-# 直接导入，如果失败则使用Qwen2.5-VL作为后备
+# 直接导入Qwen3VL，如果失败则抛出明确错误
 try:
     from transformers import Qwen3VLForConditionalGeneration
     print("PowerVision: Qwen3-VL 支持已启用")
 except ImportError:
-    print("PowerVision: Qwen3-VL 不可用，将使用 Qwen2.5-VL 模型")
-    # 创建兼容的Qwen3VL类，实际使用Qwen2.5-VL
+    print("PowerVision: Qwen3-VL 不可用，请升级 transformers 库到 >= 4.51.0")
+    # 创建占位符类，提供清晰的错误信息
     class Qwen3VLForConditionalGeneration:
         def __init__(self, *args, **kwargs):
-            # 直接使用Qwen2.5-VL作为后备
-            self._model = Qwen2_5_VLForConditionalGeneration(*args, **kwargs)
+            raise RuntimeError("Qwen3VLForConditionalGeneration 不可用，请升级 transformers 库到 >= 4.51.0")
         
         @classmethod
         def from_pretrained(cls, *args, **kwargs):
-            # 自动降级到Qwen2.5-VL
-            print("PowerVision: Qwen3-VL 不可用，自动使用 Qwen2.5-VL 模型")
-            return Qwen2_5_VLForConditionalGeneration.from_pretrained(*args, **kwargs)
-        
-        def __getattr__(self, name):
-            # 将所有方法调用转发到实际的Qwen2.5-VL模型
-            return getattr(self._model, name)
+            raise RuntimeError("Qwen3VLForConditionalGeneration 不可用，请升级 transformers 库到 >= 4.51.0")
 
 import folder_paths
 import comfy.model_management
