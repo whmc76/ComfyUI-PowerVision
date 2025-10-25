@@ -214,6 +214,7 @@ class PowerVisionObjectDetection:
         model = qwen_model.model
         processor = qwen_model.processor
         device = qwen_model.device
+        model_type = qwen_model.model_type
         
         # 设备管理
         current_device = str(next(model.parameters()).device)
