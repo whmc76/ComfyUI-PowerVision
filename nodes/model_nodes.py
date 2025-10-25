@@ -15,15 +15,23 @@ from transformers import (
     BitsAndBytesConfig,
 )
 
-# 尝试导入 Qwen3VLForConditionalGeneration，如果不可用则使用占位符
-try:
-    from transformers import Qwen3VLForConditionalGeneration
-    QWEN3_AVAILABLE = True
+# 动态检查 Qwen3VLForConditionalGeneration 可用性
+def check_qwen3_availability():
+    """动态检查Qwen3VL是否可用"""
+    try:
+        from transformers import Qwen3VLForConditionalGeneration
+        return True, Qwen3VLForConditionalGeneration
+    except ImportError:
+        return False, None
+
+# 初始检查
+QWEN3_AVAILABLE, Qwen3VLForConditionalGeneration = check_qwen3_availability()
+
+if QWEN3_AVAILABLE:
     print("PowerVision: Qwen3-VL 支持已启用")
-except ImportError:
+else:
     print("PowerVision: Qwen3VLForConditionalGeneration 不可用，将使用 Qwen2.5-VL 模型")
-    QWEN3_AVAILABLE = False
-    # 创建占位符类，确保代码不会因为类不存在而崩溃
+    # 创建占位符类
     class Qwen3VLForConditionalGeneration:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("Qwen3VLForConditionalGeneration 不可用，请升级 transformers 库或使用 Qwen2.5-VL 模型")
@@ -773,9 +781,11 @@ class PowerVisionQwenModelLoader:
             attn_impl = "sdpa"
         
         if "Qwen3-VL" in model_name:
-            if not QWEN3_AVAILABLE:
+            # 运行时重新检查Qwen3VL可用性
+            qwen3_available, qwen3_class = check_qwen3_availability()
+            if not qwen3_available:
                 raise Exception(f"PowerVision: Qwen3-VL 模型 {model_name} 不可用。请确保 transformers 库版本 >= 4.51.0，或手动选择 Qwen2.5-VL 模型。")
-            model_class = Qwen3VLForConditionalGeneration
+            model_class = qwen3_class
             model_type = "qwen3"
             if is_fp8_model:
                 print(f"PowerVision: 使用 Qwen3-VL FP8 模型: {model_name}")
