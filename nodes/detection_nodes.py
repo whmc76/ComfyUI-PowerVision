@@ -67,15 +67,31 @@ def parse_boxes(
 ) -> List[Dict[str, Any]]:
     """Return bounding boxes parsed from the model's raw JSON output."""
     text = parse_json(text)
-    try:
-        data = json.loads(text)
-    except Exception:
+    
+    # 首先尝试从文本中提取坐标信息
+    import re
+    
+    # 尝试提取坐标数组，如 [200, 100, 500, 400]
+    coord_pattern = r'\[(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\]'
+    matches = re.findall(coord_pattern, text)
+    
+    if matches:
+        # 如果找到坐标，直接使用
+        data = []
+        for match in matches:
+            x1, y1, x2, y2 = map(int, match)
+            data.append([x1, y1, x2, y2])
+    else:
+        # 如果没有找到坐标，尝试JSON解析
         try:
-            data = ast.literal_eval(text)
+            data = json.loads(text)
         except Exception:
-            end_idx = text.rfind('"}') + len('"}')
-            truncated = text[:end_idx] + "]"
-            data = ast.literal_eval(truncated)
+            try:
+                data = ast.literal_eval(text)
+            except Exception:
+                # 如果都失败了，返回空列表
+                print(f"PowerVision: 无法解析模型输出: {text[:100]}...")
+                return []
     if isinstance(data, dict):
         inner = data.get("content")
         if isinstance(inner, str):
