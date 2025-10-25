@@ -23,7 +23,7 @@
 - ComfyUI
 - CUDA 11.8+ (推荐，用于 GPU 加速)
 - 8GB+ 内存 (推荐 16GB+)
-- **transformers >= 4.51.0** (Qwen3-VL 模型最低要求)
+- **transformers >= 4.57.0** (Qwen3-VL 模型最低要求)
 
 ### 安装步骤
 
@@ -84,7 +84,7 @@
 
 #### 版本要求
 
-- **transformers >= 4.51.0**: Qwen3-VL 模型的最低要求
+- **transformers >= 4.57.0**: Qwen3-VL 模型的最低要求
 - 推荐使用最新稳定版本以获得最佳性能和兼容性
 - 如果遇到模型加载问题，请检查 transformers 版本是否满足要求
 

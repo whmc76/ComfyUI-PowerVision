@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-powervision"
 description = "A powerful ComfyUI visual processing plugin with multi-modal understanding capabilities, integrating Qwen-VL and SAM2 models"
-version = "1.2.7"
+version = "1.2.8"
 license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.8"
@@ -10,7 +10,7 @@ dependencies = [
     "numpy",
     "Pillow",
     "huggingface_hub",
-    "transformers>=4.51.0",
+    "transformers>=4.57.0",
     "accelerate",
     "safetensors",
     "qwen-vl-utils",
