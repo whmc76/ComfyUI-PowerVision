@@ -1,4 +1,19 @@
-# ComfyUI PowerVision 更新日志
+# ComfyUI-PowerVision 更新日志
+
+## [1.2.2] - 2025-01-25
+
+### 🎯 改进
+- **统一项目名称**：将项目名称从 `ComfyUI PowerVision` 更改为 `ComfyUI-PowerVision`
+- **更新仓库地址**：修正所有配置文件中的仓库 URL 为正确的 GitHub 地址
+- **更新版本号**：升级到版本 1.2.2
+
+### 📝 变更
+- 更新 `pyproject.toml` 中的 DisplayName 和版本号
+- 更新 `__init__.py` 中的项目元数据
+- 更新 `README.md` 中的项目标题和仓库地址
+- 添加 Comfy Registry 配置支持
+
+---
 
 ## [1.2.1] - 2025-01-XX
 

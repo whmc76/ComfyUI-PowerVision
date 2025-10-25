@@ -1,6 +1,6 @@
 # Comfy Registry 注册指南
 
-本文档说明如何将 ComfyUI PowerVision 插件注册到 Comfy Registry。
+本文档说明如何将 ComfyUI-PowerVision 插件注册到 Comfy Registry。
 
 **官方文档**: https://docs.comfy.org/registry/publishing
 

@@ -1,4 +1,4 @@
-# ComfyUI PowerVision 插件开发规范
+# ComfyUI-PowerVision 插件开发规范
 
 ## 代码规范
 

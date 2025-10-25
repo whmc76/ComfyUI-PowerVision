@@ -1,10 +1,10 @@
 """
-ComfyUI PowerVision 插件
+ComfyUI-PowerVision 插件
 
 这是一个基于 ComfyUI 的 PowerVision 插件，提供强大的视觉处理功能。
 
 作者: PowerVision Team
-版本: 1.2.1
+版本: 1.2.2
 许可证: MIT
 
 开源项目来源声明:
@@ -44,13 +44,13 @@ __all__ = [
 
 # 插件元数据
 PLUGIN_INFO = {
-    "name": "ComfyUI PowerVision",
-    "version": "1.2.1",
+    "name": "ComfyUI-PowerVision",
+    "version": "1.2.2",
     "description": "强大的视觉处理插件",
     "author": "PowerVision Team",
     "license": "MIT",
-    "repository": "https://github.com/powervision/ComfyUI_PowerVision",
-    "documentation": "https://github.com/powervision/ComfyUI_PowerVision/wiki"
+    "repository": "https://github.com/whmc76/ComfyUI_PowerVision",
+    "documentation": "https://github.com/whmc76/ComfyUI_PowerVision/wiki"
 }
 
 def get_plugin_info() -> Dict[str, Any]:

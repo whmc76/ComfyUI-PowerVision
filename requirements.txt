@@ -1,4 +1,4 @@
-# ComfyUI PowerVision 插件依赖包
+# ComfyUI-PowerVision 插件依赖包
 # 简化版本，依赖 ComfyUI 已有的核心库（torch, torchvision, torchaudio, numpy, pillow）
 
 # Hugging Face 生态系统

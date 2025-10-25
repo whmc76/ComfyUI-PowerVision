@@ -1,4 +1,4 @@
-# ComfyUI PowerVision 插件
+# ComfyUI-PowerVision 插件
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -29,7 +29,7 @@
 1. **克隆插件到 ComfyUI 自定义节点目录**:
    ```bash
    cd ComfyUI/custom_nodes
-   git clone https://github.com/powervision/ComfyUI_PowerVision.git
+   git clone https://github.com/whmc76/ComfyUI_PowerVision.git
    ```
 
 2. **安装依赖**:
@@ -162,16 +162,16 @@ python -m pytest tests/test_nodes.py -v
 如果您遇到问题或有建议，请：
 
 1. 查看 [常见问题](FAQ.md)
-2. 在 [Issues](https://github.com/powervision/ComfyUI_PowerVision/issues) 中搜索相关问题
+2. 在 [Issues](https://github.com/whmc76/ComfyUI_PowerVision/issues) 中搜索相关问题
 3. 创建新的 Issue 描述您的问题
-4. 加入我们的 [Discord 社区](https://discord.gg/powervision)
+4. 加入我们的社区
 
 ## 🔗 相关链接
 
 - [ComfyUI 官方文档](https://github.com/comfyanonymous/ComfyUI)
 - [Qwen-VL 项目](https://github.com/QwenLM/Qwen-VL)
 - [SAM2 项目](https://github.com/facebookresearch/segment-anything-2)
-- [PowerVision 官网](https://powervision.ai)
+- [ComfyUI Registry](https://registry.comfy.org)
 
 ---
 
