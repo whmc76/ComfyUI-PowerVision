@@ -19,12 +19,18 @@ from transformers import (
 try:
     from transformers import Qwen3VLForConditionalGeneration
     QWEN3_AVAILABLE = True
+    print("PowerVision: Qwen3-VL 支持已启用")
 except ImportError:
     print("PowerVision: Qwen3VLForConditionalGeneration 不可用，将使用 Qwen2.5-VL 模型")
     QWEN3_AVAILABLE = False
-    # 创建占位符类
+    # 创建占位符类，确保代码不会因为类不存在而崩溃
     class Qwen3VLForConditionalGeneration:
-        pass
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("Qwen3VLForConditionalGeneration 不可用，请升级 transformers 库或使用 Qwen2.5-VL 模型")
+        
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs):
+            raise RuntimeError("Qwen3VLForConditionalGeneration 不可用，请升级 transformers 库或使用 Qwen2.5-VL 模型")
 
 import folder_paths
 import comfy.model_management
@@ -768,7 +774,7 @@ class PowerVisionQwenModelLoader:
         
         if "Qwen3-VL" in model_name:
             if not QWEN3_AVAILABLE:
-                raise Exception(f"PowerVision: Qwen3-VL 模型 {model_name} 不可用。请升级 transformers 库到 4.51.0 或更高版本，或手动选择 Qwen2.5-VL 模型。")
+                raise Exception(f"PowerVision: Qwen3-VL 模型 {model_name} 不可用。请确保 transformers 库版本 >= 4.51.0，或手动选择 Qwen2.5-VL 模型。")
             model_class = Qwen3VLForConditionalGeneration
             model_type = "qwen3"
             if is_fp8_model:
