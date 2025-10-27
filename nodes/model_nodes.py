@@ -70,6 +70,20 @@ class PowerVisionQwen3VQA:
                     {"default": 2048, "min": 128, "max": 256000, "step": 1},
                 ),
                 "seed": ("INT", {"default": -1}),
+                "min_pixels": ("INT", {
+                    "default": 256 * 28 * 28,
+                    "min": 4 * 28 * 28,
+                    "max": 16384 * 28 * 28,
+                    "step": 28 * 28,
+                    "tooltip": "最小像素数，用于控制视觉令牌数量。视频处理时建议使用较小值以减少内存使用。"
+                }),
+                "max_pixels": ("INT", {
+                    "default": 1280 * 28 * 28,
+                    "min": 4 * 28 * 28,
+                    "max": 16384 * 28 * 28,
+                    "step": 28 * 28,
+                    "tooltip": "最大像素数，用于控制视觉令牌数量。视频处理时建议使用较小值以减少内存使用。"
+                }),
             },
             "optional": {
                 "source_path": ("PATH",), 
@@ -90,6 +104,8 @@ class PowerVisionQwen3VQA:
         temperature: float,
         max_new_tokens: int,
         seed: int,
+        min_pixels: int,
+        max_pixels: int,
         source_path: Optional[str] = None,
         image: Optional[torch.Tensor] = None,
         video: Optional[str] = None,
@@ -98,9 +114,32 @@ class PowerVisionQwen3VQA:
         if seed != -1:
             torch.manual_seed(seed)
         
+        # 检测视频处理并提供内存优化建议
+        if video is not None or (source_path and source_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))):
+            print("PowerVision: 检测到视频处理，应用内存优化措施")
+            # 对于视频处理，建议使用更保守的像素设置
+            if max_pixels > 640 * 28 * 28:  # 如果超过建议值
+                print(f"PowerVision: 建议将 max_pixels 降低到 640*28*28 以下以减少内存使用")
+            if min_pixels > 256 * 28 * 28:  # 如果超过建议值
+                print(f"PowerVision: 建议将 min_pixels 降低到 256*28*28 以下以减少内存使用")
+        
         model = qwen_model.model
-        processor = qwen_model.processor
         device = qwen_model.device
+        
+        # 动态创建处理器，使用像素控制参数来优化内存使用
+        # 这对于视频处理特别重要，可以减少内存消耗
+        try:
+            # 尝试使用像素控制参数创建处理器
+            processor = AutoProcessor.from_pretrained(
+                qwen_model.model.config._name_or_path,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels
+            )
+            print(f"PowerVision: 使用像素控制参数创建处理器 (min_pixels={min_pixels}, max_pixels={max_pixels})")
+        except Exception as e:
+            print(f"PowerVision: 像素控制参数创建失败，使用默认处理器: {e}")
+            # 如果失败，使用预加载的处理器
+            processor = qwen_model.processor
         
         # 处理设备字符串，将 "auto" 转换为具体设备
         if device == "auto":
@@ -361,21 +400,51 @@ class PowerVisionQwen3VQA:
             inputs = processor(**processor_kwargs)
             inputs = inputs.to(device)
             
-            generated_ids = model.generate(
-                **inputs, max_new_tokens=max_new_tokens, temperature=temperature
-            )
-            generated_ids_trimmed = [
-                out_ids[len(in_ids):]
-                for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
-            result = processor.batch_decode(
-                generated_ids_trimmed,
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=False,
-                temperature=temperature,
-            )
-
-            return (result,)
+            # 添加内存优化措施
+            torch.cuda.empty_cache() if torch.cuda.is_available() else None
+            
+            # 使用更保守的生成参数来减少内存使用
+            generation_kwargs = {
+                "max_new_tokens": max_new_tokens,
+                "temperature": temperature,
+                "do_sample": True if temperature > 0 else False,
+                "pad_token_id": processor.tokenizer.eos_token_id,
+            }
+            
+            # 对于视频处理，使用更保守的参数
+            if video_inputs:
+                generation_kwargs.update({
+                    "max_new_tokens": min(max_new_tokens, 1024),  # 限制生成长度
+                    "num_beams": 1,  # 使用贪心搜索而不是束搜索
+                })
+                print("PowerVision: 视频处理模式，使用保守的生成参数")
+            
+            try:
+                generated_ids = model.generate(**inputs, **generation_kwargs)
+                generated_ids_trimmed = [
+                    out_ids[len(in_ids):]
+                    for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+                ]
+                result = processor.batch_decode(
+                    generated_ids_trimmed,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False,
+                    temperature=temperature,
+                )
+                return (result,)
+            except torch.cuda.OutOfMemoryError as e:
+                error_msg = f"GPU内存不足: {str(e)}\n\n建议解决方案:\n"
+                error_msg += "1. 降低 max_pixels 参数 (建议: 640*28*28 或更小)\n"
+                error_msg += "2. 降低 min_pixels 参数 (建议: 256*28*28 或更小)\n"
+                error_msg += "3. 使用量化模型 (INT4/INT8)\n"
+                error_msg += "4. 减少 max_new_tokens 参数\n"
+                error_msg += "5. 关闭其他占用GPU内存的程序\n"
+                print(f"PowerVision: {error_msg}")
+                return (error_msg,)
+            except Exception as e:
+                error_msg = f"推理过程中发生错误: {str(e)}"
+                print(f"PowerVision: {error_msg}")
+                return (error_msg,)
 
 
 class PowerVisionQwenModelLoader:
