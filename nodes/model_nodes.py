@@ -50,236 +50,9 @@ class QwenModel:
     model_type: str = "qwen3"  # "qwen3" 或 "qwen2.5"
 
 
+
+
 class PowerVisionQwen3VQA:
-    """PowerVision Qwen3-VL 视觉问答节点"""
-    
-    def __init__(self):
-        self.model_checkpoint = None
-        self.processor = None
-        self.model = None
-        self.device = comfy.model_management.get_torch_device()
-        self.bf16_support = (
-            torch.cuda.is_available()
-            and torch.cuda.get_device_capability(self.device)[0] >= 8
-        )
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "text": ("STRING", {"default": "", "multiline": True}),
-                "model": (
-                    [
-                        "Qwen3-VL-4B-Instruct",
-                        "Qwen3-VL-4B-Thinking",
-                        "Qwen3-VL-8B-Instruct",
-                        "Qwen3-VL-8B-Thinking",
-                    ],
-                    {"default": "Qwen3-VL-4B-Instruct"},
-                ),
-                "quantization": (
-                    ["none", "4bit", "8bit"],
-                    {"default": "none"},
-                ),
-                "keep_model_loaded": ("BOOLEAN", {"default": False}),
-                "temperature": (
-                    "FLOAT",
-                    {"default": 0.7, "min": 0, "max": 1, "step": 0.1},
-                ),
-                "max_new_tokens": (
-                    "INT",
-                    {"default": 2048, "min": 128, "max": 256000, "step": 1},
-                ),
-                "min_pixels": (
-                    "INT",
-                    {
-                        "default": 256 * 28 * 28,
-                        "min": 4 * 28 * 28,
-                        "max": 16384 * 28 * 28,
-                        "step": 28 * 28,
-                    },
-                ),
-                "max_pixels": (
-                    "INT",
-                    {
-                        "default": 1280 * 28 * 28,
-                        "min": 4 * 28 * 28,
-                        "max": 16384 * 28 * 28,
-                        "step": 28 * 28,
-                    },
-                ),
-                "seed": ("INT", {"default": -1}),
-                "attention": (
-                    [
-                        "eager",
-                        "sdpa",
-                        "flash_attention_2",
-                    ],
-                ),
-            },
-            "optional": {"source_path": ("PATH",), "image": ("IMAGE",)},
-        }
-
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("result",)
-    FUNCTION = "inference"
-    CATEGORY = "PowerVision/Load Model"
-
-    def inference(
-        self,
-        text: str,
-        model: str,
-        keep_model_loaded: bool,
-        temperature: float,
-        max_new_tokens: int,
-        min_pixels: int,
-        max_pixels: int,
-        seed: int,
-        quantization: str,
-        source_path: Optional[str] = None,
-        image: Optional[torch.Tensor] = None,
-        attention: str = "eager",
-    ) -> Tuple[str]:
-        """执行视觉问答推理"""
-        if seed != -1:
-            torch.manual_seed(seed)
-        
-        model_id = f"qwen/{model}"
-        self.model_checkpoint = os.path.join(
-            folder_paths.models_dir, "Qwen", os.path.basename(model_id)
-        )
-
-        if not os.path.exists(self.model_checkpoint):
-            snapshot_download(
-                repo_id=model_id,
-                local_dir=self.model_checkpoint,
-                local_dir_use_symlinks=False,
-            )
-
-        if self.processor is None:
-            self.processor = AutoProcessor.from_pretrained(
-                self.model_checkpoint, min_pixels=min_pixels, max_pixels=max_pixels
-            )
-
-        if self.model is None:
-            if quantization == "4bit":
-                quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-            elif quantization == "8bit":
-                quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-            else:
-                quantization_config = None
-
-            self.model = Qwen3VLForConditionalGeneration.from_pretrained(
-                self.model_checkpoint,
-                dtype=torch.bfloat16 if self.bf16_support else torch.float16,
-                device_map="auto",
-                attn_implementation=attention,
-                quantization_config=quantization_config,
-            )
-
-        temp_path = None
-        if image is not None:
-            from torchvision.transforms import ToPILImage
-            pil_image = ToPILImage()(image[0].permute(2, 0, 1))
-            temp_path = os.path.join(folder_paths.temp_directory, f"temp_image_{seed}.png")
-            pil_image.save(temp_path)
-
-        with torch.no_grad():
-            if source_path:
-                messages = [
-                    {
-                        "role": "system",
-                        "content": "You are QwenVL, you are a helpful assistant expert in turning images into words.",
-                    },
-                    {
-                        "role": "user",
-                        "content": source_path
-                        + [
-                            {"type": "text", "text": text},
-                        ],
-                    },
-                ]
-            elif temp_path:
-                messages = [
-                    {
-                        "role": "system",
-                        "content": "You are QwenVL, you are a helpful assistant expert in turning images into words.",
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "image", "image": f"file://{temp_path}"},
-                            {"type": "text", "text": text},
-                        ],
-                    },
-                ]
-            else:
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": text},
-                        ],
-                    }
-                ]
-
-            text = self.processor.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
-            
-            # 尝试导入 qwen_vl_utils，如果不存在则提供备用实现
-            try:
-                from qwen_vl_utils import process_vision_info
-            except ImportError:
-                def process_vision_info(messages):
-                    image_inputs = []
-                    video_inputs = []
-                    for message in messages:
-                        if isinstance(message.get("content"), list):
-                            for content in message["content"]:
-                                if content.get("type") == "image":
-                                    image_inputs.append(content.get("image"))
-                                elif content.get("type") == "video":
-                                    video_inputs.append(content.get("video"))
-                    return image_inputs, video_inputs
-            
-            image_inputs, video_inputs = process_vision_info(messages)
-            inputs = self.processor(
-                text=[text],
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                return_tensors="pt",
-            )
-            inputs = inputs.to(self.device)
-            
-            generated_ids = self.model.generate(
-                **inputs, max_new_tokens=max_new_tokens, temperature=temperature
-            )
-            generated_ids_trimmed = [
-                out_ids[len(in_ids):]
-                for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
-            result = self.processor.batch_decode(
-                generated_ids_trimmed,
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=False,
-                temperature=temperature,
-            )
-
-            if not keep_model_loaded:
-                del self.processor
-                del self.model
-                self.processor = None
-                self.model = None
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    torch.cuda.ipc_collect()
-
-            return (result,)
-
-
-class PowerVisionQwen3VQAWithModel:
     """PowerVision Qwen3-VL 视觉问答节点（使用预加载模型）"""
     
     @classmethod
@@ -298,7 +71,11 @@ class PowerVisionQwen3VQAWithModel:
                 ),
                 "seed": ("INT", {"default": -1}),
             },
-            "optional": {"source_path": ("PATH",), "image": ("IMAGE",)},
+            "optional": {
+                "source_path": ("PATH",), 
+                "image": ("IMAGE",),
+                "video": ("VIDEO",)
+            },
         }
 
     RETURN_TYPES = ("STRING",)
@@ -315,6 +92,7 @@ class PowerVisionQwen3VQAWithModel:
         seed: int,
         source_path: Optional[str] = None,
         image: Optional[torch.Tensor] = None,
+        video: Optional[str] = None,
     ) -> Tuple[str]:
         """执行视觉问答推理（使用预加载模型）"""
         if seed != -1:
@@ -331,17 +109,116 @@ class PowerVisionQwen3VQAWithModel:
             else:
                 device = "cpu"
 
-        temp_path = None
+        # 处理图像输入
+        temp_image_path = None
         if image is not None:
             from torchvision.transforms import ToPILImage
             pil_image = ToPILImage()(image[0].permute(2, 0, 1))
-            temp_path = os.path.join(folder_paths.temp_directory, f"temp_image_{seed}.png")
-            pil_image.save(temp_path)
+            temp_image_path = os.path.join(folder_paths.temp_directory, f"temp_image_{seed}.png")
+            pil_image.save(temp_image_path)
+
+        # 处理视频输入
+        temp_video_path = None
+        if video is not None:
+            # 如果 video 是字符串路径，直接使用
+            if isinstance(video, str):
+                temp_video_path = video
+            # 如果 video 是 VideoFromFile 对象，提取路径
+            elif hasattr(video, 'get_stream_source'):
+                try:
+                    temp_video_path = video.get_stream_source()
+                except Exception:
+                    temp_video_path = None
+            elif hasattr(video, 'file_path'):
+                temp_video_path = video.file_path
+            elif hasattr(video, 'path'):
+                temp_video_path = video.path
+            elif hasattr(video, 'filename'):
+                temp_video_path = video.filename
+            elif hasattr(video, 'name'):
+                temp_video_path = video.name
+            else:
+                # 尝试获取所有属性值
+                for attr in dir(video):
+                    if not attr.startswith('_'):
+                        try:
+                            value = getattr(video, attr)
+                            if isinstance(value, str) and ('.mp4' in value or '.avi' in value or '.mov' in value):
+                                temp_video_path = value
+                                break
+                        except:
+                            pass
+                
+                # 如果仍然没有找到路径，尝试转换为字符串
+                if not temp_video_path:
+                    temp_video_path = str(video)
 
         with torch.no_grad():
-            # 优先使用直接传入的图片，然后是 source_path，最后是纯文本
-            if temp_path:
-                # 使用直接传入的图片
+            # 构建消息，参考项目的实现方式
+            if source_path:
+                # 使用 source_path，让 process_vision_info 自动识别文件类型
+                if isinstance(source_path, list):
+                    # source_path 已经是列表，直接使用
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": "You are QwenVL, you are a helpful assistant expert in turning images into words.",
+                        },
+                        {
+                            "role": "user",
+                            "content": source_path + [
+                                {"type": "text", "text": text},
+                            ],
+                        },
+                    ]
+                else:
+                    # source_path 是字符串，需要根据文件类型处理
+                    if source_path:
+                        # 检查文件类型
+                        file_ext = os.path.splitext(source_path)[1].lower()
+                        
+                        if file_ext in ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv']:
+                            # 视频文件
+                            messages = [
+                                {
+                                    "role": "system",
+                                    "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
+                                },
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "video", "video": source_path},  # 直接使用路径，不加 file:// 前缀
+                                        {"type": "text", "text": text},
+                                    ],
+                                },
+                            ]
+                        else:
+                            # 图像文件或其他类型
+                            messages = [
+                                {
+                                    "role": "system",
+                                    "content": "You are QwenVL, you are a helpful assistant expert in turning images into words.",
+                                },
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "image", "image": f"file://{source_path}"},
+                                        {"type": "text", "text": text},
+                                    ],
+                                },
+                            ]
+                    else:
+                        # 如果 source_path 为空，回退到纯文本模式
+                        messages = [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": text},
+                                ],
+                            }
+                        ]
+            elif temp_image_path:
+                # 使用直接传入的图像
                 messages = [
                     {
                         "role": "system",
@@ -350,40 +227,26 @@ class PowerVisionQwen3VQAWithModel:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "image", "image": f"file://{temp_path}"},
+                            {"type": "image", "image": f"file://{temp_image_path}"},
                             {"type": "text", "text": text},
                         ],
                     },
                 ]
-            elif source_path:
-                # 使用 source_path 作为备选
-                if isinstance(source_path, list):
-                    source_path = source_path[0] if source_path else None
-                
-                if source_path:
-                    messages = [
-                        {
-                            "role": "system",
-                            "content": "You are QwenVL, you are a helpful assistant expert in turning images into words.",
-                        },
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "image", "image": f"file://{source_path}"},
-                                {"type": "text", "text": text},
-                            ],
-                        },
-                    ]
-                else:
-                    # 如果 source_path 为空，回退到纯文本模式
-                    messages = [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": text},
-                            ],
-                        }
-                    ]
+            elif temp_video_path:
+                # 使用直接传入的视频
+                messages = [
+                    {
+                        "role": "system",
+                        "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "video", "video": temp_video_path},  # 直接使用路径，不加 file:// 前缀
+                            {"type": "text", "text": text},
+                        ],
+                    },
+                ]
             else:
                 # 纯文本模式
                 messages = [
@@ -399,59 +262,103 @@ class PowerVisionQwen3VQAWithModel:
                 messages, tokenize=False, add_generation_prompt=True
             )
             
-            # 尝试导入 qwen_vl_utils，如果不存在则提供备用实现
+            # 使用 qwen_vl_utils 的 process_vision_info 函数
             try:
                 from qwen_vl_utils import process_vision_info
             except ImportError:
+                # 如果 qwen_vl_utils 不可用，提供备用实现
                 def process_vision_info(messages):
                     image_inputs = []
                     video_inputs = []
+                    
                     for message in messages:
-                        if isinstance(message.get("content"), list):
-                            for content in message["content"]:
-                                if content.get("type") == "image":
-                                    image_path = content.get("image")
-                                    # 移除 file:// 协议前缀，直接使用文件路径
-                                    if image_path and image_path.startswith("file://"):
-                                        image_path = image_path[7:]  # 移除 "file://" 前缀
-                                    image_inputs.append(image_path)
-                                elif content.get("type") == "video":
-                                    video_inputs.append(content.get("video"))
+                        content = message.get("content")
+                        
+                        if isinstance(content, list):
+                            for item in content:
+                                if isinstance(item, dict):
+                                    if item.get("type") == "image":
+                                        image_path = item.get("image")
+                                        # 移除 file:// 协议前缀，直接使用文件路径
+                                        if image_path and image_path.startswith("file://"):
+                                            image_path = image_path[7:]  # 移除 "file://" 前缀
+                                        image_inputs.append(image_path)
+                                    elif item.get("type") == "video":
+                                        video_obj = item.get("video")
+                                        
+                                        # 处理 VideoFromFile 对象
+                                        if video_obj:
+                                            # 检查是否是 VideoFromFile 对象
+                                            if hasattr(video_obj, 'get_stream_source'):
+                                                try:
+                                                    video_path = video_obj.get_stream_source()
+                                                    video_inputs.append(video_path)
+                                                except Exception:
+                                                    pass
+                                            elif hasattr(video_obj, 'file_path'):
+                                                video_path = video_obj.file_path
+                                                video_inputs.append(video_path)
+                                            elif hasattr(video_obj, 'path'):
+                                                video_path = video_obj.path
+                                                video_inputs.append(video_path)
+                                            elif hasattr(video_obj, 'filename'):
+                                                video_path = video_obj.filename
+                                                video_inputs.append(video_path)
+                                            elif hasattr(video_obj, 'name'):
+                                                video_path = video_obj.name
+                                                video_inputs.append(video_path)
+                                            elif isinstance(video_obj, str):
+                                                # 如果已经是字符串路径
+                                                video_inputs.append(video_obj)
+                                            else:
+                                                # 尝试获取所有属性值
+                                                for attr in dir(video_obj):
+                                                    if not attr.startswith('_'):
+                                                        try:
+                                                            value = getattr(video_obj, attr)
+                                                            if isinstance(value, str) and ('.mp4' in value or '.avi' in value or '.mov' in value):
+                                                                video_inputs.append(value)
+                                                                break
+                                                        except:
+                                                            pass
+                                                
+                                                # 如果仍然没有找到路径，尝试转换为字符串
+                                                if not video_inputs:
+                                                    video_path = str(video_obj)
+                                                    video_inputs.append(video_path)
+                        elif isinstance(content, str):
+                            # 处理字符串格式的 content（可能是文件路径）
+                            if content and content.startswith("file://"):
+                                content = content[7:]  # 移除 "file://" 前缀
+                            
+                            # 根据文件扩展名判断类型
+                            if content:
+                                file_ext = os.path.splitext(content)[1].lower()
+                                if file_ext in ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv']:
+                                    video_inputs.append(content)
+                                elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff']:
+                                    image_inputs.append(content)
+                    
                     return image_inputs, video_inputs
             
             image_inputs, video_inputs = process_vision_info(messages)
             
-            # 根据模型类型选择不同的调用方式
-            if qwen_model.model_type == "qwen3":
-                # Qwen3-VL 支持 images 和 videos 参数
-                processor_kwargs = {
-                    "text": [text],
-                    "padding": True,
-                    "return_tensors": "pt",
-                }
-                
-                # 只有当有图片时才添加 images 参数
-                if image_inputs:
-                    processor_kwargs["images"] = image_inputs
-                
-                # 只有当有视频时才添加 videos 参数
-                if video_inputs:
-                    processor_kwargs["videos"] = video_inputs
-                
-                inputs = processor(**processor_kwargs)
-            else:
-                # Qwen2.5-VL 只支持 images 参数，不支持 videos
-                processor_kwargs = {
-                    "text": [text],
-                    "padding": True,
-                    "return_tensors": "pt",
-                }
-                
-                # 只有当有图片时才添加 images 参数
-                if image_inputs:
-                    processor_kwargs["images"] = image_inputs
-                
-                inputs = processor(**processor_kwargs)
+            # 调用处理器，参考项目的实现方式
+            processor_kwargs = {
+                "text": [text],
+                "padding": True,
+                "return_tensors": "pt",
+            }
+            
+            # 只有当有图片时才添加 images 参数
+            if image_inputs:
+                processor_kwargs["images"] = image_inputs
+            
+            # 只有当有视频时才添加 videos 参数
+            if video_inputs:
+                processor_kwargs["videos"] = video_inputs
+            
+            inputs = processor(**processor_kwargs)
             inputs = inputs.to(device)
             
             generated_ids = model.generate(
