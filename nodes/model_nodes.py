@@ -309,19 +309,54 @@ class PowerVisionQwen3VQA:
                         
                         if file_ext in ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv']:
                             # 视频文件
-                            messages = [
-                                {
-                                    "role": "system",
-                                    "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
-                                },
-                                {
-                                    "role": "user",
-                                    "content": [
-                                        {"type": "video", "video": source_path},  # 直接使用路径，不加 file:// 前缀
-                                        {"type": "text", "text": text},
-                                    ],
-                                },
-                            ]
+                            # 对于 Qwen2.5-VL，使用采样策略提取帧
+                            if is_qwen25_model:
+                                print("PowerVision: Qwen2.5-VL 使用视频帧采样策略（source_path）")
+                                video_frames = extract_video_frames(source_path, max_frames=16)
+                                if video_frames:
+                                    messages = [
+                                        {
+                                            "role": "system",
+                                            "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
+                                        },
+                                        {
+                                            "role": "user",
+                                            "content": [
+                                                {"type": "video", "video": video_frames},  # 使用PIL Image列表
+                                                {"type": "text", "text": text},
+                                            ],
+                                        },
+                                    ]
+                                else:
+                                    # 如果采样失败，回退到使用路径
+                                    messages = [
+                                        {
+                                            "role": "system",
+                                            "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
+                                        },
+                                        {
+                                            "role": "user",
+                                            "content": [
+                                                {"type": "video", "video": source_path},
+                                                {"type": "text", "text": text},
+                                            ],
+                                        },
+                                    ]
+                            else:
+                                # Qwen3-VL 使用路径方式
+                                messages = [
+                                    {
+                                        "role": "system",
+                                        "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
+                                    },
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {"type": "video", "video": source_path},  # 直接使用路径，不加 file:// 前缀
+                                            {"type": "text", "text": text},
+                                        ],
+                                    },
+                                ]
                         else:
                             # 图像文件或其他类型
                             messages = [
