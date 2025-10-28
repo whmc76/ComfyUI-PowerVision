@@ -12,6 +12,7 @@ from huggingface_hub import snapshot_download
 from transformers import (
     Qwen2_5_VLForConditionalGeneration,
     AutoProcessor,
+    AutoModelForVision2Seq,
     BitsAndBytesConfig,
 )
 
@@ -97,6 +98,7 @@ class PowerVisionQwen3VQA:
     FUNCTION = "inference"
     CATEGORY = "PowerVision/Image Caption"
 
+    @torch.no_grad()  # 参考 ComfyUI-QwenVL 项目，使用装饰器减少内存使用
     def inference(
         self,
         qwen_model: QwenModel,
@@ -153,20 +155,19 @@ class PowerVisionQwen3VQA:
             model_path = qwen_model.model.config._name_or_path
             
             # 对于 Qwen2.5-VL，需要特别处理
+            # 参考 ComfyUI-QwenVL 项目，使用 trust_remote_code=True
+            processor_kwargs = {
+                "min_pixels": min_pixels,
+                "max_pixels": max_pixels,
+                "trust_remote_code": True
+            }
+            
             if is_qwen25_model:
-                processor = AutoProcessor.from_pretrained(
-                    model_path,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
-                    use_fast=False  # Qwen2.5-VL 使用 slow processor
-                )
+                processor_kwargs["use_fast"] = False  # Qwen2.5-VL 使用 slow processor
+                processor = AutoProcessor.from_pretrained(model_path, **processor_kwargs)
                 print(f"PowerVision: Qwen2.5-VL 使用像素控制参数创建处理器 (min_pixels={min_pixels}, max_pixels={max_pixels})")
             else:
-                processor = AutoProcessor.from_pretrained(
-                    model_path,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels
-                )
+                processor = AutoProcessor.from_pretrained(model_path, **processor_kwargs)
                 print(f"PowerVision: 使用像素控制参数创建处理器 (min_pixels={min_pixels}, max_pixels={max_pixels})")
         except Exception as e:
             print(f"PowerVision: 像素控制参数创建失败，使用默认处理器: {e}")
@@ -462,9 +463,8 @@ class PowerVisionQwen3VQA:
                 }
             
             try:
-                # 使用 torch.no_grad() 来减少内存使用
-                with torch.no_grad():
-                    generated_ids = model.generate(**inputs, **generation_kwargs)
+                # 已经在函数级别使用 @torch.no_grad() 装饰器
+                generated_ids = model.generate(**inputs, **generation_kwargs)
                 generated_ids_trimmed = [
                     out_ids[len(in_ids):]
                     for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
@@ -834,11 +834,19 @@ class PowerVisionQwenModelLoader:
             raise
         
         # 对于 Qwen2.5-VL，使用 slow processor 以避免检测结果差异
+        # 参考 ComfyUI-QwenVL 项目，使用 trust_remote_code=True
         if model_type == "qwen2.5":
-            processor = AutoProcessor.from_pretrained(model_dir, use_fast=False)
+            processor = AutoProcessor.from_pretrained(
+                model_dir,
+                use_fast=False,
+                trust_remote_code=True
+            )
             print("PowerVision: Qwen2.5-VL 使用 slow processor (use_fast=False)")
         else:
-            processor = AutoProcessor.from_pretrained(model_dir)
+            processor = AutoProcessor.from_pretrained(
+                model_dir,
+                trust_remote_code=True
+            )
         
         return (QwenModel(model=model, processor=processor, device=device, model_type=model_type),)
 
