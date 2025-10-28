@@ -148,14 +148,26 @@ class PowerVisionQwen3VQA:
         
         # 动态创建处理器，使用像素控制参数来优化内存使用
         # 这对于视频处理特别重要，可以减少内存消耗
+        # 参考 ComfyUI-QwenVL 项目，每次推理时使用像素参数创建新处理器
         try:
-            # 尝试使用像素控制参数创建处理器
-            processor = AutoProcessor.from_pretrained(
-                qwen_model.model.config._name_or_path,
-                min_pixels=min_pixels,
-                max_pixels=max_pixels
-            )
-            print(f"PowerVision: 使用像素控制参数创建处理器 (min_pixels={min_pixels}, max_pixels={max_pixels})")
+            model_path = qwen_model.model.config._name_or_path
+            
+            # 对于 Qwen2.5-VL，需要特别处理
+            if is_qwen25_model:
+                processor = AutoProcessor.from_pretrained(
+                    model_path,
+                    min_pixels=min_pixels,
+                    max_pixels=max_pixels,
+                    use_fast=False  # Qwen2.5-VL 使用 slow processor
+                )
+                print(f"PowerVision: Qwen2.5-VL 使用像素控制参数创建处理器 (min_pixels={min_pixels}, max_pixels={max_pixels})")
+            else:
+                processor = AutoProcessor.from_pretrained(
+                    model_path,
+                    min_pixels=min_pixels,
+                    max_pixels=max_pixels
+                )
+                print(f"PowerVision: 使用像素控制参数创建处理器 (min_pixels={min_pixels}, max_pixels={max_pixels})")
         except Exception as e:
             print(f"PowerVision: 像素控制参数创建失败，使用默认处理器: {e}")
             # 如果失败，使用预加载的处理器
