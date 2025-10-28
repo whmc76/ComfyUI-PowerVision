@@ -552,17 +552,19 @@ class PowerVisionQwen3VQA:
                 gc.collect()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                print("PowerVision: Qwen2.5-VL 视频处理前执行内存清理")
+                    torch.cuda.synchronize()  # 确保CUDA操作完成
+                print("PowerVision: Qwen2.5-VL 视频处理前执行完整内存清理")
             
             # 使用更保守的生成参数来减少内存使用
             # 参考 Qwen3-VL 参考项目，使用简单的参数
             if video_inputs and is_qwen25_model:
-                # Qwen2.5-VL 视频处理：使用最保守的参数
-                max_tokens = min(max_new_tokens, 256)  # 进一步限制到256，减少内存峰值
+                # Qwen2.5-VL 视频处理：使用采样策略后，可以增加生成令牌数
+                # 采样策略大大减少了内存使用，所以可以生成更多内容
+                max_tokens = min(max_new_tokens, 1024)  # 采样模式下增加到1024
                 generation_kwargs = {
                     "max_new_tokens": max_tokens,
                 }
-                print(f"PowerVision: Qwen2.5-VL 视频处理模式，max_new_tokens={max_tokens}（极其保守设置）")
+                print(f"PowerVision: Qwen2.5-VL 视频处理模式（采样），max_new_tokens={max_tokens}")
             elif video_inputs:
                 # Qwen3-VL 或其他模型的视频处理
                 max_tokens = min(max_new_tokens, 1024)
