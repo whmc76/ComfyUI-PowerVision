@@ -128,13 +128,14 @@ class PowerVisionQwen3VQA:
                 original_max_pixels = max_pixels
                 original_min_pixels = min_pixels
                 
-                max_pixels = min(max_pixels, 160 * 28 * 28)  # 强制限制到更小的值
-                min_pixels = min(min_pixels, 64 * 28 * 28)   # 强制限制到更小的值
+                # 视频处理需要非常保守的参数
+                max_pixels = min(max_pixels, 80 * 28 * 28)   # 非常保守：约 62,720 像素
+                min_pixels = min(min_pixels, 32 * 28 * 28)   # 非常保守：约 25,088 像素
                 
                 if original_max_pixels != max_pixels:
-                    print(f"PowerVision: 自动调整 max_pixels 从 {original_max_pixels} 到 {max_pixels}")
+                    print(f"PowerVision: 自动调整 max_pixels 从 {original_max_pixels} 到 {max_pixels} (约 {max_pixels // (28*28)} 视觉令牌)")
                 if original_min_pixels != min_pixels:
-                    print(f"PowerVision: 自动调整 min_pixels 从 {original_min_pixels} 到 {min_pixels}")
+                    print(f"PowerVision: 自动调整 min_pixels 从 {original_min_pixels} 到 {min_pixels} (约 {min_pixels // (28*28)} 视觉令牌)")
             else:
                 # 对于其他模型，提供建议但不强制调整
                 if max_pixels > 640 * 28 * 28:  # 如果超过建议值
@@ -425,31 +426,28 @@ class PowerVisionQwen3VQA:
             model.eval()  # 确保模型在评估模式
             
             # 使用更保守的生成参数来减少内存使用
-            generation_kwargs = {
-                "max_new_tokens": max_new_tokens,
-                "temperature": temperature,
-                "do_sample": True if temperature > 0 else False,
-                "pad_token_id": processor.tokenizer.eos_token_id,
-            }
-            
-            # 对于视频处理，使用更保守的参数
-            if video_inputs:
-                if is_qwen25_model:
-                    # Qwen2.5-VL 需要更激进的优化
-                    generation_kwargs.update({
-                        "max_new_tokens": min(max_new_tokens, 512),  # 更严格的限制
-                        "num_beams": 1,  # 使用贪心搜索
-                        "do_sample": False,  # 禁用采样，使用贪心解码
-                        "early_stopping": True,  # 早停
-                    })
-                    print("PowerVision: Qwen2.5-VL 视频处理模式，使用激进的内存优化参数")
-                else:
-                    # 其他模型使用标准优化
-                    generation_kwargs.update({
-                        "max_new_tokens": min(max_new_tokens, 1024),  # 限制生成长度
-                        "num_beams": 1,  # 使用贪心搜索而不是束搜索
-                    })
-                    print("PowerVision: 视频处理模式，使用保守的生成参数")
+            # 参考 Qwen3-VL 参考项目，使用简单的参数
+            if video_inputs and is_qwen25_model:
+                # Qwen2.5-VL 视频处理：使用最保守的参数
+                max_tokens = min(max_new_tokens, 512)
+                generation_kwargs = {
+                    "max_new_tokens": max_tokens,
+                }
+                print(f"PowerVision: Qwen2.5-VL 视频处理模式，max_new_tokens={max_tokens}")
+            elif video_inputs:
+                # Qwen3-VL 或其他模型的视频处理
+                max_tokens = min(max_new_tokens, 1024)
+                generation_kwargs = {
+                    "max_new_tokens": max_tokens,
+                    "temperature": temperature,
+                }
+                print(f"PowerVision: 视频处理模式，max_new_tokens={max_tokens}, temperature={temperature}")
+            else:
+                # 图像处理：使用标准参数
+                generation_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "temperature": temperature,
+                }
             
             try:
                 # 使用 torch.no_grad() 来减少内存使用
