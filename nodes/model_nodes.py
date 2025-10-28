@@ -71,14 +71,14 @@ class PowerVisionQwen3VQA:
                 ),
                 "seed": ("INT", {"default": -1}),
                 "min_pixels": ("INT", {
-                    "default": 256 * 28 * 28,
+                    "default": 64 * 28 * 28,  # 更保守的默认值
                     "min": 4 * 28 * 28,
                     "max": 16384 * 28 * 28,
                     "step": 28 * 28,
                     "tooltip": "最小像素数，用于控制视觉令牌数量。视频处理时建议使用较小值以减少内存使用。"
                 }),
                 "max_pixels": ("INT", {
-                    "default": 1280 * 28 * 28,
+                    "default": 320 * 28 * 28,  # 更保守的默认值
                     "min": 4 * 28 * 28,
                     "max": 16384 * 28 * 28,
                     "step": 28 * 28,
@@ -115,13 +115,32 @@ class PowerVisionQwen3VQA:
             torch.manual_seed(seed)
         
         # 检测视频处理并提供内存优化建议
-        if video is not None or (source_path and source_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))):
+        is_video_processing = video is not None or (source_path and source_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')))
+        is_qwen25_model = qwen_model.model_type == "qwen2.5"
+        
+        if is_video_processing:
             print("PowerVision: 检测到视频处理，应用内存优化措施")
-            # 对于视频处理，建议使用更保守的像素设置
-            if max_pixels > 640 * 28 * 28:  # 如果超过建议值
-                print(f"PowerVision: 建议将 max_pixels 降低到 640*28*28 以下以减少内存使用")
-            if min_pixels > 256 * 28 * 28:  # 如果超过建议值
-                print(f"PowerVision: 建议将 min_pixels 降低到 256*28*28 以下以减少内存使用")
+            
+            # 对于 Qwen2.5-VL 模型，自动使用更保守的参数
+            if is_qwen25_model:
+                print("PowerVision: 检测到 Qwen2.5-VL 模型，自动应用激进的内存优化")
+                # 自动调整参数到更保守的值
+                original_max_pixels = max_pixels
+                original_min_pixels = min_pixels
+                
+                max_pixels = min(max_pixels, 160 * 28 * 28)  # 强制限制到更小的值
+                min_pixels = min(min_pixels, 64 * 28 * 28)   # 强制限制到更小的值
+                
+                if original_max_pixels != max_pixels:
+                    print(f"PowerVision: 自动调整 max_pixels 从 {original_max_pixels} 到 {max_pixels}")
+                if original_min_pixels != min_pixels:
+                    print(f"PowerVision: 自动调整 min_pixels 从 {original_min_pixels} 到 {min_pixels}")
+            else:
+                # 对于其他模型，提供建议但不强制调整
+                if max_pixels > 640 * 28 * 28:  # 如果超过建议值
+                    print(f"PowerVision: 建议将 max_pixels 降低到 640*28*28 以下以减少内存使用")
+                if min_pixels > 256 * 28 * 28:  # 如果超过建议值
+                    print(f"PowerVision: 建议将 min_pixels 降低到 256*28*28 以下以减少内存使用")
         
         model = qwen_model.model
         device = qwen_model.device
@@ -398,10 +417,12 @@ class PowerVisionQwen3VQA:
                 processor_kwargs["videos"] = video_inputs
             
             inputs = processor(**processor_kwargs)
+            
             inputs = inputs.to(device)
             
             # 添加内存优化措施
             torch.cuda.empty_cache() if torch.cuda.is_available() else None
+            model.eval()  # 确保模型在评估模式
             
             # 使用更保守的生成参数来减少内存使用
             generation_kwargs = {
@@ -413,14 +434,27 @@ class PowerVisionQwen3VQA:
             
             # 对于视频处理，使用更保守的参数
             if video_inputs:
-                generation_kwargs.update({
-                    "max_new_tokens": min(max_new_tokens, 1024),  # 限制生成长度
-                    "num_beams": 1,  # 使用贪心搜索而不是束搜索
-                })
-                print("PowerVision: 视频处理模式，使用保守的生成参数")
+                if is_qwen25_model:
+                    # Qwen2.5-VL 需要更激进的优化
+                    generation_kwargs.update({
+                        "max_new_tokens": min(max_new_tokens, 512),  # 更严格的限制
+                        "num_beams": 1,  # 使用贪心搜索
+                        "do_sample": False,  # 禁用采样，使用贪心解码
+                        "early_stopping": True,  # 早停
+                    })
+                    print("PowerVision: Qwen2.5-VL 视频处理模式，使用激进的内存优化参数")
+                else:
+                    # 其他模型使用标准优化
+                    generation_kwargs.update({
+                        "max_new_tokens": min(max_new_tokens, 1024),  # 限制生成长度
+                        "num_beams": 1,  # 使用贪心搜索而不是束搜索
+                    })
+                    print("PowerVision: 视频处理模式，使用保守的生成参数")
             
             try:
-                generated_ids = model.generate(**inputs, **generation_kwargs)
+                # 使用 torch.no_grad() 来减少内存使用
+                with torch.no_grad():
+                    generated_ids = model.generate(**inputs, **generation_kwargs)
                 generated_ids_trimmed = [
                     out_ids[len(in_ids):]
                     for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
