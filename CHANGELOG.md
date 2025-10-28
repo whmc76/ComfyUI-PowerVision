@@ -5,6 +5,36 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且此项目遵循 [语义化版本](https://semver.org/spec/v2.0.0.html)。
 
+## [1.5.0] - 2024-12-19
+
+### 新增
+- Qwen2.5-VL 视频处理采用帧采样策略
+- 添加视频帧提取功能（使用 OpenCV）
+- 支持从视频文件中提取并采样关键帧
+- 动态像素参数控制，自动优化内存使用
+
+### 更改
+- Qwen2.5-VL 视频处理改为使用 PIL Image 列表而非文件路径
+- 优化默认像素参数（min_pixels: 64*28*28, max_pixels: 320*28*28）
+- 采样模式下增加生成令牌数限制（max_new_tokens: 1024）
+- 处理器初始化添加 trust_remote_code=True 参数
+- 使用 @torch.no_grad() 装饰器减少内存使用
+- 改进内存清理和同步机制
+
+### 修复
+- 修复 Qwen2.5-VL 视频处理内存不足问题
+- 修复 source_path 视频输入未使用采样策略的问题
+- 统一 video 和 source_path 两种视频输入方式的处理逻辑
+- 修复无效的 generation 参数警告
+- 优化 VideoFromFile 对象路径提取
+
+### 技术改进
+- 参考 ComfyUI-QwenVL 项目实现采样策略
+- 添加视频帧采样函数，支持均匀采样
+- 增强错误处理和资源管理
+- 改进日志输出，提供更详细的处理信息
+- 优化 GPU 内存管理和清理
+
 ## [1.4.0] - 2024-12-19
 
 ### 新增
