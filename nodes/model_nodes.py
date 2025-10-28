@@ -6,8 +6,10 @@ PowerVision 模型相关节点
 
 import os
 import torch
-from typing import Tuple, Optional, Any
+import numpy as np
+from typing import Tuple, Optional, Any, List
 from dataclasses import dataclass
+from PIL import Image
 from huggingface_hub import snapshot_download
 from transformers import (
     Qwen2_5_VLForConditionalGeneration,
@@ -49,6 +51,61 @@ class QwenModel:
     processor: Any
     device: str
     model_type: str = "qwen3"  # "qwen3" 或 "qwen2.5"
+
+
+def extract_video_frames(video_path: str, max_frames: int = 16) -> List[Image.Image]:
+    """
+    从视频文件中提取帧并采样
+    
+    Args:
+        video_path: 视频文件路径
+        max_frames: 最大采样帧数
+    
+    Returns:
+        PIL Image 列表
+    """
+    try:
+        import cv2
+        
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise ValueError(f"无法打开视频文件: {video_path}")
+        
+        frames = []
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+        if frame_count <= max_frames:
+            # 如果帧数少于等于max_frames，提取所有帧
+            indices = list(range(frame_count))
+        else:
+            # 均匀采样
+            indices = np.linspace(0, frame_count - 1, max_frames, dtype=int).tolist()
+        
+        for idx in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if ret:
+                # 转换 BGR 到 RGB
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                # 转换为 PIL Image
+                pil_image = Image.fromarray(frame_rgb)
+                frames.append(pil_image)
+        
+        cap.release()
+        
+        # 如果只有一帧，复制一帧（参考项目的做法）
+        if len(frames) == 1:
+            frames.append(frames[0])
+        
+        print(f"PowerVision: 从视频中提取了 {len(frames)} 帧 (总帧数: {frame_count})")
+        return frames
+        
+    except ImportError:
+        print("PowerVision: cv2 未安装，无法提取视频帧，将使用视频路径")
+        return []
+    except Exception as e:
+        print(f"PowerVision: 视频帧提取失败: {e}")
+        return []
 
 
 
@@ -130,9 +187,10 @@ class PowerVisionQwen3VQA:
                 original_max_pixels = max_pixels
                 original_min_pixels = min_pixels
                 
-                # 视频处理需要非常保守的参数
-                max_pixels = min(max_pixels, 80 * 28 * 28)   # 非常保守：约 62,720 像素
-                min_pixels = min(min_pixels, 32 * 28 * 28)   # 非常保守：约 25,088 像素
+                # Qwen2.5-VL 视频处理需要极其保守的参数
+                # 参考其他项目的经验，对视频使用更小的值
+                max_pixels = min(max_pixels, 40 * 28 * 28)   # 极其保守：约 31,360 像素（40个视觉令牌）
+                min_pixels = min(min_pixels, 16 * 28 * 28)   # 极其保守：约 12,544 像素（16个视觉令牌）
                 
                 if original_max_pixels != max_pixels:
                     print(f"PowerVision: 自动调整 max_pixels 从 {original_max_pixels} 到 {max_pixels} (约 {max_pixels // (28*28)} 视觉令牌)")
@@ -306,19 +364,54 @@ class PowerVisionQwen3VQA:
                 ]
             elif temp_video_path:
                 # 使用直接传入的视频
-                messages = [
-                    {
-                        "role": "system",
-                        "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "video", "video": temp_video_path},  # 直接使用路径，不加 file:// 前缀
-                            {"type": "text", "text": text},
-                        ],
-                    },
-                ]
+                # 对于 Qwen2.5-VL，使用采样策略提取帧
+                if is_qwen25_model:
+                    print("PowerVision: Qwen2.5-VL 使用视频帧采样策略")
+                    video_frames = extract_video_frames(temp_video_path, max_frames=16)
+                    if video_frames:
+                        messages = [
+                            {
+                                "role": "system",
+                                "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
+                            },
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "video", "video": video_frames},  # 使用PIL Image列表
+                                    {"type": "text", "text": text},
+                                ],
+                            },
+                        ]
+                    else:
+                        # 如果采样失败，回退到使用路径
+                        messages = [
+                            {
+                                "role": "system",
+                                "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
+                            },
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "video", "video": temp_video_path},
+                                    {"type": "text", "text": text},
+                                ],
+                            },
+                        ]
+                else:
+                    # Qwen3-VL 使用路径方式
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": "You are QwenVL, you are a helpful assistant expert in turning videos into words.",
+                        },
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "video", "video": temp_video_path},  # 直接使用路径，不加 file:// 前缀
+                                {"type": "text", "text": text},
+                            ],
+                        },
+                    ]
             else:
                 # 纯文本模式
                 messages = [
@@ -358,10 +451,15 @@ class PowerVisionQwen3VQA:
                                     elif item.get("type") == "video":
                                         video_obj = item.get("video")
                                         
-                                        # 处理 VideoFromFile 对象
+                                        # 处理视频对象
                                         if video_obj:
+                                            # 检查是否是 PIL Image 列表（采样策略）
+                                            if isinstance(video_obj, list) and len(video_obj) > 0 and isinstance(video_obj[0], Image.Image):
+                                                # 直接使用 PIL Image 列表
+                                                video_inputs.append(video_obj)
+                                                print(f"PowerVision: 使用采样后的视频帧列表（{len(video_obj)} 帧）")
                                             # 检查是否是 VideoFromFile 对象
-                                            if hasattr(video_obj, 'get_stream_source'):
+                                            elif hasattr(video_obj, 'get_stream_source'):
                                                 try:
                                                     video_path = video_obj.get_stream_source()
                                                     video_inputs.append(video_path)
@@ -416,37 +514,55 @@ class PowerVisionQwen3VQA:
             image_inputs, video_inputs = process_vision_info(messages)
             
             # 调用处理器，参考项目的实现方式
+            # 参考 ComfyUI-QwenVL 项目，处理 PIL Image 列表
             processor_kwargs = {
-                "text": [text],
-                "padding": True,
+                "text": text,
                 "return_tensors": "pt",
             }
             
-            # 只有当有图片时才添加 images 参数
+            # 处理图像输入
             if image_inputs:
                 processor_kwargs["images"] = image_inputs
             
-            # 只有当有视频时才添加 videos 参数
+            # 处理视频输入
             if video_inputs:
-                processor_kwargs["videos"] = video_inputs
+                # 如果视频是 PIL Image 列表，需要展平
+                if len(video_inputs) == 1 and isinstance(video_inputs[0], list) and isinstance(video_inputs[0][0], Image.Image):
+                    # 这是采样后的帧列表，直接使用
+                    processor_kwargs["videos"] = video_inputs
+                    print(f"PowerVision: 处理器将处理 {len(video_inputs[0])} 帧视频")
+                else:
+                    # 原始路径方式
+                    processor_kwargs["videos"] = video_inputs
             
             inputs = processor(**processor_kwargs)
             
             inputs = inputs.to(device)
             
             # 添加内存优化措施
-            torch.cuda.empty_cache() if torch.cuda.is_available() else None
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()  # 确保所有CUDA操作完成
+            
             model.eval()  # 确保模型在评估模式
+            
+            # 对于 Qwen2.5-VL 视频处理，在生成前再次清理内存
+            if video_inputs and is_qwen25_model:
+                import gc
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                print("PowerVision: Qwen2.5-VL 视频处理前执行内存清理")
             
             # 使用更保守的生成参数来减少内存使用
             # 参考 Qwen3-VL 参考项目，使用简单的参数
             if video_inputs and is_qwen25_model:
                 # Qwen2.5-VL 视频处理：使用最保守的参数
-                max_tokens = min(max_new_tokens, 512)
+                max_tokens = min(max_new_tokens, 256)  # 进一步限制到256，减少内存峰值
                 generation_kwargs = {
                     "max_new_tokens": max_tokens,
                 }
-                print(f"PowerVision: Qwen2.5-VL 视频处理模式，max_new_tokens={max_tokens}")
+                print(f"PowerVision: Qwen2.5-VL 视频处理模式，max_new_tokens={max_tokens}（极其保守设置）")
             elif video_inputs:
                 # Qwen3-VL 或其他模型的视频处理
                 max_tokens = min(max_new_tokens, 1024)
