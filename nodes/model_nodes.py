@@ -628,6 +628,12 @@ class PowerVisionQwen3VQA:
                     clean_up_tokenization_spaces=False,
                     temperature=temperature,
                 )
+                # 将列表转换为字符串
+                if isinstance(result, list):
+                    if len(result) > 0:
+                        result = result[0]
+                    else:
+                        result = ""
                 return (result,)
             except torch.cuda.OutOfMemoryError as e:
                 error_msg = f"GPU内存不足: {str(e)}\n\n建议解决方案:\n"
@@ -685,7 +691,7 @@ class PowerVisionQwenModelLoader:
                 "attention": ([
                     "flash_attention_2",
                     "sdpa",
-                ], ),
+                ], {"default": "sdpa"}),
                 "download_source": ([
                     "auto",
                     "huggingface",

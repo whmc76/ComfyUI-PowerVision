@@ -8,12 +8,18 @@ accelerate
 safetensors
 
 # Qwen-VL 专用依赖
-qwen-vl-utils
+qwen_vl_utils  # Sa2VA 所需
 
 # 量化支持
 bitsandbytes
+
+# Sa2VA 支持（可选，但推荐）
+# flash-attn  # 可选：提高效率，需要 CUDA 支持，安装可能较复杂
+# 如需安装 flash-attn，请参考: https://github.com/Dao-AILab/flash-attention
 
 # 注意: 
 # - torch, torchvision, torchaudio, numpy, pillow 由 ComfyUI 提供，无需安装
 # - 版本限制已放宽，与 ComfyUI 环境兼容
 # - ModelScope 是可选的备选下载源，可按需安装（已在代码中处理为可选）
+# - Sa2VA 需要 transformers >= 4.57.0 和 qwen_vl_utils
+# - flash-attn 是可选的，但可以显著提高 Sa2VA 模型的效率

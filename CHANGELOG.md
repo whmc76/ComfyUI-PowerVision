@@ -5,6 +5,12 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且此项目遵循 [语义化版本](https://semver.org/spec/v2.0.0.html)。
 
+## [1.5.1] - 2024-12-20
+
+### 修复
+- 修复 PowerVision Qwen3-VL VQA 节点输出格式问题：将列表输出转换为字符串输出
+- 确保 VQA 节点返回字符串类型而非列表类型，提升与其他节点的兼容性
+
 ## [1.5.0] - 2024-12-19
 
 ### 新增

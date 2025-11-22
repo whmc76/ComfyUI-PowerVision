@@ -32,6 +32,11 @@ from .utility_nodes import (
     PowerVisionResultAnalyzer,
 )
 
+# 导入 Sa2VA 节点
+from .sa2va_nodes import (
+    PowerVisionSa2VASegmentation,
+)
+
 # 节点映射
 NODE_CLASS_MAPPINGS = {
     # 图像节点
@@ -51,6 +56,9 @@ NODE_CLASS_MAPPINGS = {
     # 工具节点
     "PowerVisionTextProcessor": PowerVisionTextProcessor,
     "PowerVisionResultAnalyzer": PowerVisionResultAnalyzer,
+    
+    # Sa2VA 节点
+    "PowerVisionSa2VASegmentation": PowerVisionSa2VASegmentation,
 }
 
 # 节点显示名称映射
@@ -72,6 +80,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # 工具节点
     "PowerVisionTextProcessor": "PowerVision Text Processor",
     "PowerVisionResultAnalyzer": "PowerVision Result Analyzer",
+    
+    # Sa2VA 节点
+    "PowerVisionSa2VASegmentation": "PowerVision Sa2VA Segmentation",
 }
 
 # 导出所有内容
@@ -87,6 +98,7 @@ __all__ = [
     "PowerVisionDetectionFilter",
     "PowerVisionTextProcessor",
     "PowerVisionResultAnalyzer",
+    "PowerVisionSa2VASegmentation",
     # 数据类
     "QwenModel",
     "DetectedBox",
