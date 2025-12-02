@@ -628,12 +628,16 @@ class PowerVisionQwen3VQA:
                     clean_up_tokenization_spaces=False,
                     temperature=temperature,
                 )
-                # 将列表转换为字符串
+                # 确保返回字符串类型，而不是列表
                 if isinstance(result, list):
                     if len(result) > 0:
-                        result = result[0]
+                        # 将所有元素转换为字符串并拼接
+                        result = "\n".join(str(item) for item in result if item is not None)
                     else:
                         result = ""
+                # 如果result不是字符串，转换为字符串
+                if not isinstance(result, str):
+                    result = str(result) if result is not None else ""
                 return (result,)
             except torch.cuda.OutOfMemoryError as e:
                 error_msg = f"GPU内存不足: {str(e)}\n\n建议解决方案:\n"
